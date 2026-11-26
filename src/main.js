@@ -127,11 +127,13 @@ function shell(title, body, { back = 'home', showTabs = true } = {}) {
 
 function tabs() {
   const s = stats(pack, progress)
-  return `<nav class="tabs">
+  const wrongLabel = s.wrong ? `错题·${s.wrong}` : '错题'
+  const staleLabel = s.stale ? `待复习·${s.stale}` : '待复习'
+  return `<nav class="tabs" aria-label="主导航">
     <button type="button" data-nav="home" class="${route.name === 'home' ? 'on' : ''}">首页</button>
     <button type="button" data-nav="quiz/global" class="${pathKey().startsWith('quiz') ? 'on' : ''}">练习</button>
-    <button type="button" data-nav="wrong">错题${s.wrong ? `(${s.wrong})` : ''}</button>
-    <button type="button" data-nav="stale">待复习${s.stale ? `(${s.stale})` : ''}</button>
+    <button type="button" data-nav="wrong">${wrongLabel}</button>
+    <button type="button" data-nav="stale">${staleLabel}</button>
   </nav>`
 }
 
@@ -159,10 +161,16 @@ function renderHome() {
         <button type="button" data-nav="feedback">${openNoteCount() ? `学习反馈 (${openNoteCount()})` : '学习反馈'}</button>
         <button type="button" data-action="sync-agent-inbox">同步给 Agent</button>
         <button type="button" data-nav="sync-settings">同步设置</button>
-        <button type="button" data-nav="appearance">外观</button>
       </div>
       <p class="muted">「明白 / 不懂」给 Agent 改内容。点「同步给 Agent」写入本地并（已配 Token 时）上传 GitHub <code>agent-inbox/</code>。</p>
       <p id="sync-status" class="muted">${escapeText(formatLastSync())}</p>
+    </div>
+    <div class="card stack">
+      <div class="row space">
+        <h2 style="margin:0">主题色</h2>
+        <span class="muted">点色块立即切换 · 仅本机</span>
+      </div>
+      ${themeSwatches()}
     </div>
     <div class="card">
       <h2>模块</h2>
