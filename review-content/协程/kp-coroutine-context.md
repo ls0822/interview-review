@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: CoroutineContext 元素与异常处理器
 priority: P0
-version: 2
+version: 3
 order: 30
 requires: [kp-coroutine-basics]
 ---

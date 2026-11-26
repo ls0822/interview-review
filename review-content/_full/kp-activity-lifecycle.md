@@ -4,7 +4,8 @@ type: knowledge
 module: android
 title: Activity 启动模式与生命周期
 priority: P0
-version: 2
+version: 3
+order: 10
 ---
 
 ## 一句话
@@ -77,13 +78,7 @@ singleInstance 独占任务栈，是因为这个页面和普通页面叠在一�
 
 大对象、数据库连接、Socket 不能塞进 Bundle。Bundle 走的是系统保存的小 Parcel，超了会 TransactionTooLarge。
 
-冷启动会创建进程再经 AMS 回调，热启动只是把已有任务栈带到前台。这和 singleTask 不是一回事。singleTask 解决的是栈里要不要再压一个实例，不负责加快进程启动。
-
-透明主题盖上来时底下往往只到 onPause。停相机和动画要写在 onPause，只写 onStop 会漏掉这种场景。
-
-复用实例必须 setIntent，否则 getIntent 仍是旧的。
-
-进程被杀后 ViewModel 不在。
+冷启动走「建进程 → Application → AMS 回调 → onCreate」；热启动只是已有任务栈回前台，与启动模式（例如 singleTask 是否在栈里复用实例）是两件不同的事。
 
 ## 使用与实践
 
@@ -126,6 +121,8 @@ class RoomActivity : AppCompatActivity() {
 边界二：进程被杀后再进来。`savedInstanceState != null`，ViewModel 是新的，内存里的消息列表是空的。只能恢复房间号这种小状态，然后重新连接、补拉。把「旋转后 ViewModel 还在」说成「进程被杀也还在」是错的。
 
 边界三：singleTask 从推送打开。栈是 首页 → 编辑页 →（目标是首页）。系统清掉编辑页，编辑页 `onDestroy`。用户没保存的草稿如果只在 Activity 字段里，就没了。草稿要在离开前写入 ViewModel 以外的存储，或者产品明确接受被清掉。
+
+错误对照：只在 `onCreate` 里 `openRoom(intent)`，`onNewIntent` 不 `setIntent` 也不刷新——推送点同一页仍显示旧房间号，`getIntent()` 永远是首次创建时的 Intent。
 
 ## 画面（text 结构图）
 

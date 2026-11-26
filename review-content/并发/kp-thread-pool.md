@@ -4,105 +4,89 @@ type: knowledge
 module: concurrent
 title: 线程池 ThreadPoolExecutor
 priority: P0
-version: 1
+version: 2
+requires: [kp-thread-basics]
+order: 50
 ---
 
 ## 一句话
 
-线程池用固定上限的工人加任务队列消化任务；新任务先填满核心线程，再进队列，队列满了才扩到最大线程，再满才拒绝。无界队列会让最大线程数永远用不上。
+线程池用有上限工人 + 任务队列消化工作：先填满核心线程，再入队，队满才扩到最大，再满才拒绝——无界队列会让 `maximumPoolSize` 永远用不上，失败模式是 OOM 和主线程 `CallerRuns` ANR。
 
 ## 组成与结构
 
-`ThreadPoolExecutor` 构造器里面试要能点名的是这七个：
+构造七参：`corePoolSize`、`maximumPoolSize`、`keepAliveTime`、`workQueue`、`threadFactory`、`RejectedExecutionHandler`。
 
-| 参数 | 作用 |
+工厂方法代价：
+
+| 工厂 | 风险 |
 |------|------|
-| `corePoolSize` | 核心工人数。即使闲着也保留（除非 `allowCoreThreadTimeOut`） |
-| `maximumPoolSize` | 工人上限 |
-| `keepAliveTime` + 单位 | 超出核心的线程空闲多久被回收 |
-| `workQueue` | 还没开始跑的任务 |
-| `threadFactory` | 起线程、起名字、设异常处理器 |
-| `RejectedExecutionHandler` | 队列和最大线程都满时怎么办 |
+| `newFixedThreadPool` | 无界 `LinkedBlockingQueue`，max 无效 |
+| `newCachedThreadPool` | max=MAX，SynchronousQueue，线程数暴涨 |
+| `newSingleThreadExecutor` | 无界队列，顺序执行 |
+| `newScheduledThreadPool` | 定时；未捕获异常停后续周期 |
 
-四个工厂方法要知道代价：`newFixedThreadPool` 固定 n 条加无界 `LinkedBlockingQueue`；`newSingleThreadExecutor` 一条线程保序，队列同样无界；`newCachedThreadPool` 核心为 0、最大为 `Integer.MAX_VALUE`、用 `SynchronousQueue`，来任务就加线程；`newScheduledThreadPool` 支持延迟和周期。业务池应自己写明有界队列，而不是用工厂方法碰运气。
-
-协程 `Dispatchers.Default` / `IO` 背后也是调度器加线程，不是无限 `new Thread`。会讲线程池，才能讲清 IO 并行度默认至少 64、Default 大约按核数。
+`Dispatchers.Default`/`IO` 背后也是池化调度，懂池才懂 IO 并行度与反压。
 
 ## 原理
 
-任务从 `execute(Runnable)` 进来，顺序是固定的，中间不能跳步。
+**P0：`execute` 顺序（不能跳步）。**
 
-1. **工人数 < core。** 即使已有线程在闲着，也会再建一条核心线程来跑这个任务。这是为了先把核心编制填满，而不是「有空闲就复用」。所以池子刚启动时，连续提交 core 个任务会看到 core 条线程，而不是一条线程把队列吃光。
-2. **核心已满。** 任务交给 `workQueue.offer`。成功就返回，不再加线程。队列里的任务由已有工人在 `getTask()` 里 `take` / `poll` 取走。
-3. **offer 失败（队列满）且工人数 < max。** 再创建非核心线程直接跑这个任务。非核心线程空闲超过 `keepAliveTime` 会被回收。
-4. **工人数已经是 max，或创建失败。** 走 `handler.rejectedExecution`。默认 `AbortPolicy` 抛 `RejectedExecutionException`。`CallerRunsPolicy` 让提交者自己在当前线程跑，形成反压。`DiscardPolicy` 丢掉且不通知。`DiscardOldestPolicy` 丢掉队头再试一次，可能把还没执行的旧任务静默扔掉。
+1. 线程数 < core → 新建核心线程跑任务（即使有空闲核心也可能先建——填满编制）。
+2. 否则 `queue.offer` 成功 → 排队，核心 `getTask` 取。
+3. offer 失败且线程 < max → 建非核心线程跑当前任务；空闲超 keepAlive 回收。
+4. 否则 `handler.rejectedExecution`。
 
-因此「核心满了就扩到 max」是错的。中间隔着队列。`LinkedBlockingQueue` 不设容量时 `offer` 几乎总成功，第 3 步到不了，`maximumPoolSize` 是摆设，内存先被队列打满。
+故「核心满就扩 max」错，中间隔队列。无界 `LinkedBlockingQueue` → 步骤 3 永不到，内存先被队列吃光。
 
-`shutdown()` 拒绝新任务，已在队列和正在跑的继续做完。`shutdownNow()` 对工人发中断，并把队列里没跑的任务作为列表返回，并不保证正在跑的立刻停，停不停看任务是否响应中断。`awaitTermination` 用来在进程退出前等一个时限。
+**P0：关闭语义。** `shutdown` 拒新、做完已在跑与队列中。`shutdownNow` 中断工人 + 返回未跑任务列表；正在跑的不保证停，看任务是否响应中断。`awaitTermination` 限时等。
 
-周期任务若用 `scheduleAtFixedRate`，上一次还没结束，下一次不会重叠执行在同一条调度线程上，但任务本身若再丢进别的池，仍可能并发。异常若从定时任务里抛出且没抓住，后续周期会停，这是常见事故。
+**专家加分：定时任务。** `scheduleAtFixedRate` 上次没完不会重叠在同调度线程；任务内再丢无界池仍可能并发。未捕获异常 → 后续周期停。
+
+**失败模式：** `CallerRunsPolicy` 在 UI 线程 `execute` → 拒绝路径主线程跑重活，ANR。`Discard*` 静默丢任务，线上以为在上传。`shutdownNow` 对不查中断的死循环无效。
 
 ## 使用与实践
 
-Android 上按职责拆池，不要一个全局无界池包打天下：
+按职责拆池：网络/磁盘有界队列 + 小核心 + 明确拒绝；计算贴近核数 + 短队列。会话顺序：单线程池或单消费者 Channel。
 
-- 网络、磁盘：有界队列，核心数小（例如 2～4），拒绝时失败回调或稍后重试。更常见是直接用 `Dispatchers.IO`，但 IO 默认并行度很高，突发大文件仍要用 `limitedParallelism` 或信号量。
-- 计算：核数附近，队列短，避免把 CPU 打满还堆内存。
-- 要顺序的会话发送：单线程池或容量有界的 Channel 单消费者，保证同一会话不并发写。
-
-`CallerRunsPolicy` 发生在主线程 `execute` 时，拒绝路径会把重活跑回主线程，可能 ANR。上传队列满了应显式失败，不要默默 `Discard`。
-
-给 `threadFactory` 设 `UncaughtExceptionHandler`。线程池会把任务里的异常包住，定时任务更要自己 try，否则你以为在跑，其实早就停了。
+拒绝要回调/重试，勿默认 CallerRuns 在可能的主线程。`threadFactory` 命名 + `UncaughtExceptionHandler`。
 
 ## 例子
 
 ```java
+// 对：有界队列背压
 ThreadPoolExecutor pool = new ThreadPoolExecutor(
-        2, 4, 30, TimeUnit.SECONDS,
-        new ArrayBlockingQueue<>(64),
-        r -> {
-            Thread t = new Thread(r, "upload");
-            t.setDaemon(false);
-            return t;
-        },
-        new ThreadPoolExecutor.AbortPolicy());
-
-try {
-    pool.execute(() -> upload(file));
-} catch (RejectedExecutionException e) {
-    onReject(file); // 让调用方决定重试，而不是丢在队列里
-}
-
-pool.shutdown();
-if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
-    pool.shutdownNow();
-}
+    2, 4, 30, TimeUnit.SECONDS,
+    new ArrayBlockingQueue<>(64),
+    r -> new Thread(r, "upload"),
+    new ThreadPoolExecutor.AbortPolicy());
+try { pool.execute(() -> upload(file)); }
+catch (RejectedExecutionException e) { onReject(file); }
 ```
 
-容量 64 的队列是背压点：第 2+64 个之后才会出现第 3、第 4 条线程，再多则抛拒绝。把队列换成 `new LinkedBlockingQueue<>()` 后，线程数会停在 2，任务无限堆积。
+```java
+// 错：无界队列——线程永远 2，任务堆进堆 OOM
+new ThreadPoolExecutor(2, 4, 0L, SECONDS,
+    new LinkedBlockingQueue<>(), ...);
+
+// 错：主线程 execute + CallerRuns，池满后 UI 跑 upload
+new ThreadPoolExecutor(..., new CallerRunsPolicy());
+// Activity 里 pool.execute(heavy)
+```
 
 ## 画面
 
 ```text
-execute(task)
-    |
-    v
-工人 < core ? --是--> 新建核心线程执行
-    |否
-    v
-队列.offer 成功? --是--> 排队，等核心线程取
-    |否
-    v
-工人 < max ? --是--> 新建非核心线程执行
-    |否
-    v
-拒绝策略：抛 / 调用者跑 / 丢 / 丢最旧
+execute -> workers<core? 新建核心
+       -> offer 队列? 排队
+       -> workers<max? 新建非核心
+       -> 拒绝策略
 ```
 
 ## 常见坑与追问
 
-1. **无界队列。** 追问：为什么监控上线程数正常、内存却涨？任务都在 `LinkedBlockingQueue` 节点里，max 没参与。
-2. **`newCachedThreadPool` 接用户流量。** 每个任务一条线程，栈内存先 OOM。追问：它为什么看起来「没有队列」？`SynchronousQueue` 不存元素，移交失败就加线程。
-3. **`shutdownNow` 当成强杀。** 不响应中断的死循环照样跑。追问：和协程 `cancel` 像在哪？都是协作式，都要任务在检查点停下来。
-4. **主线程提交 + `CallerRuns`。** 追问：ANR 栈会停在哪？停在业务任务里，看起来像主线程自己在做重活，根因是池满了的拒绝路径。
+1. **无界队列。** 追问：线程数正常内存涨？任务在队列节点里。
+2. **`newCachedThreadPool` 接流量。** 追问：看似无队列？`SynchronousQueue` 不存元素，移交失败加线程。
+3. **`shutdownNow` 当强杀。** 追问：与协程 cancel？都协作，要在检查点停。
+4. **主线程 + CallerRuns。** 追问：ANR 栈？业务代码在主线程，根因池满。
+5. **一个全局无界池包全部。** 错法：上传/解析/打点共用且无界。追问：如何拆？职责池 + 有界 + 命名便于 traces。

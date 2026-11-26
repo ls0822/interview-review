@@ -2,7 +2,8 @@
 
 题库源只在 `review-content/`。  
 完整规格：`docs/CONTENT_SPEC.md`  
-生成边界：`docs/CONTENT_BOUNDARY.md`
+生成边界：`docs/CONTENT_BOUNDARY.md`  
+专家深度（默认生成标准）：`docs/EXPERT_DEPTH.md`
 
 ## 规范放在哪
 
@@ -40,10 +41,11 @@
 
 ## 质量与台阶（摘要）
 
+- **默认专家级深度**（`EXPERT_DEPTH.md`）：生成时即按资深面试可追问标准写，不是先浅后补。
 - 篇内按七段坡度写；术语延后；一点一进。
 - 篇间用 `requires` / `order`；不跳先修。
 - 新 kp：主考模块 + 能并入则并入；交卷报放置理由。
-- 改完过 CONTENT_SPEC 自检清单；二次不懂必须降坡。
+- 改完过 CONTENT_SPEC + EXPERT_DEPTH 自检；二次不懂必须降坡。
 
 ## 发布
 

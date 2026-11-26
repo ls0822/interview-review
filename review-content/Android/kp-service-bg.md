@@ -4,7 +4,9 @@ type: knowledge
 module: android
 title: Service 与后台限制
 priority: P0
-version: 2
+version: 3
+order: 40
+requires: [kp-activity-lifecycle]
 ---
 
 ## 一句话
@@ -54,12 +56,6 @@ Android 8 之后，应用不在前台时，后台直接 `startService` 会抛 `I
 `onStartCommand` 的返回值是在回答「进程被系统杀掉之后，要不要把这次启动再送回来」。`START_NOT_STICKY` 表示不要自动再拉，适合用户已经离开、任务可以下次再说的同步。`START_REDELIVER_INTENT` 会把最后一次 Intent 再送进来，适合可以接着做的下载，但仍然不是保活：系统可以很久以后才送，而且后台限制还在。选择返回值时先说产品能不能接受丢失这一次，再说要不要重投。
 
 绑定计数也要自己想清楚。两个界面都 bind 了同一个服务，只有都解绑且没有 start 过，服务才会销毁。一个界面在 `onStop` 解绑，另一个还停在前台，服务应继续。如果在第一个界面解绑时就 `stopSelf`，第二个界面的 Binder 调用会失败。start 和 bind 的结束条件写在一处，不要散落在各个 Activity 里各自 stop。
-
-前台服务的通知要在服务刚起来时就挂上，网络放在 startForeground 之后。类型和清单一致，并且和用户能感知的工作一致。IM 断线讲退避重连，不讲双进程互拉。
-
-多次 start 都有自己的 startId。无参 stopSelf 会把后一次任务一起停掉，连续启动时用带 id 的 stopSelf。
-
-只 bind 不 start 时，界面一解绑服务就可以销毁。
 
 ## 使用与实践
 

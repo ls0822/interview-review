@@ -97,6 +97,22 @@ for (const file of files) {
         }
       }
     }
+    // 专家深度软门槛（警告）：原理过短 / 无追问 / 无错例痕迹
+    const prin = body.match(/##\s*原理[\s\S]*?(?=\n##\s|$)/)
+    const pit = body.match(/##\s*常见坑[\s\S]*?(?=\n##\s|$)/)
+    const ex = body.match(/##\s*例子[\s\S]*?(?=\n##\s|$)/)
+    if (prin && prin[0].length < 600) {
+      warnings.push(`${where}: 原理段偏短（<600），可能未达 EXPERT_DEPTH`)
+    }
+    if (pit && !/追问/.test(pit[0])) {
+      warnings.push(`${where}: 常见坑缺少「追问」字样`)
+    }
+    if (ex && !/(错|不要|反例|对比|错误)/.test(ex[0])) {
+      warnings.push(`${where}: 例子段未见错误对照痕迹`)
+    }
+    if (!data.order && !String(data.order || '').length) {
+      warnings.push(`${where}: 建议补 order（阅读序）`)
+    }
   }
 
   if (data.type === 'qa') {

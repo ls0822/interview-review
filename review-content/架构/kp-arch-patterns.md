@@ -4,7 +4,9 @@ type: knowledge
 module: architecture
 title: MVC / MVP / MVVM / MVI
 priority: P0
-version: 2
+version: 3
+order: 10
+requires: [kp-coroutine-flow]
 ---
 
 ## 一句话

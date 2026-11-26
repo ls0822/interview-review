@@ -4,7 +4,9 @@ type: knowledge
 module: network
 title: 客户端网络优化
 priority: P0
-version: 2
+version: 3
+order: 60
+requires: [kp-okhttp, kp-dns-cdn]
 ---
 
 ## 一句话

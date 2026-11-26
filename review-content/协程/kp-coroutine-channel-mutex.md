@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: Channel、Mutex 与限流
 priority: P0
-version: 2
+version: 3
 order: 70
 requires: [kp-coroutine-builders]
 ---
@@ -40,7 +40,14 @@ Channel 容量：
 5. **和 Dispatcher 的死锁环。** 持着 Mutex 切到 IO，IO 里又要等主线程上一个需要这把锁的协程，主线程那个协程正在等你解锁。挂起没有拆开这个环。固定多把锁的获取顺序，和 Java 死锁同一规则。
 6. **Semaphore 限流。** 许可被取走后，第 n+1 个协程挂在 `withPermit`，不会再占一条新线程去堵。它不保证公平到严格先来后到的面试细节可以不展开，但要说明：限的是协程进入数，不是线程池大小。`Dispatchers.IO.limitedParallelism(3)` 是另一条路，限制这个视图上同时运行的协程。Channel 加固定个数的 worker 则是「队列 + 消费者数量」限流，还能天然背压。
 
-`select` 可以同时等多个 Channel 或超时，知道能用来做「谁先来处理谁」即可。
+`select` 可以同时等多个 Channel 或超时，知道能用来做「谁先来处理谁」即可。`onSend` / `onReceive` 在 `select` 块里是真正的原子选择：同一时刻只有一个分支会成功，避免自己写两把锁去抢先后。
+
+| 场景 | Channel | Mutex | Semaphore |
+|------|---------|-------|-----------|
+| 多生产者一条队列 | 有界 Channel + 单消费者 | — | — |
+| 保护一个可变对象 | — | `withLock` | — |
+| 限制同时下载数 | 可配合 worker 数 | — | `withPermit` |
+| 广播给所有界面 | 不行 | — | — → `SharedFlow` |
 
 ## 使用与实践
 
@@ -91,6 +98,31 @@ suspend fun inner() {
 
 `CONFLATED` 适合只保留最后一次进度：`Channel<Int>(Channel.CONFLATED)`。中间进度可以丢时才用，信令不能用它。
 
+错误对照：
+
+```kotlin
+// 错：把 Channel 当 StateFlow，两个收集者各收一半
+val bus = Channel<Event>()
+scope.launch { for (e in bus) panelA.handle(e) }
+scope.launch { for (e in bus) panelB.handle(e) } // 每条消息只进一个 for
+
+// 错：ClosedSendChannelException 后继续 send
+channel.close()
+channel.send(x) // 已关闭
+
+// 错：Semaphore acquire 忘了 release
+gate.acquire()
+download() // 抛异常时许可泄漏 → 后续永远挂起
+// 应对：withPermit { download() }
+
+// 对：select 谁先就绪处理谁
+select<Unit> {
+    signal.onReceive { handle(it) }
+    cmd.onReceive { dispatch(it) }
+    onTimeout(5_000) { reconnect() }
+}
+```
+
 ## 画面
 
 ```text
@@ -112,3 +144,5 @@ Semaphore(3)：第四个协程挂在 withPermit
 2. **Mutex 当 synchronized 那样嵌套。** 追问：为什么死锁？不可重入，第二次挂起等不到自己的解锁。
 3. **withLock 里 withContext 做网络。** 追问：锁放开了吗？没有。临界区只留改状态的几行。
 4. **多个收集者抢同一个 Channel 当事件总线。** 追问：一条消息谁收到？一个接收者。广播用 SharedFlow。
+5. **`select` 外再手动锁两个 Channel。** 追问：竞态在哪？可能两个都「快满」时重复处理。用 `select` 原子等。
+6. **`Channel.UNLIMITED` 当「不会丢」。** 追问：背压去了哪？堆内存和续体。快生产仍会 OOM。

@@ -4,7 +4,8 @@ type: knowledge
 module: android
 title: Handler 消息机制
 priority: P0
-version: 2
+version: 3
+order: 20
 ---
 
 ## 一句话
@@ -68,15 +69,7 @@ Activity 已经 `onDestroy`，只要还有一条 10 秒后的消息，这条链�
 
 这一轮没有立刻要执行的消息时，队列回调 `IdleHandler`。首帧已经画完、用户还没操作，这时做一点延迟初始化，不跟启动抢主线程。回调里再做重活，空闲就结束了，下一次卡顿还是主线程的。它不是后台线程，只是「主线程暂时没别的事」。
 
-主线程已经在 `loop()` 里，不要再为「让界面动起来」新开一个 Looper。子线程如果只是做完一次网络就 `post` 回主线程，用线程池或协程即可，不必为这一次任务准备 Looper。只有「这条线程要长期、按顺序消化消息」才用 HandlerThread。消息的 `obj` 如果放了大图或整段 JSON，队列会把这些对象一直留到执行时刻，所以大对象应在后台处理完，消息里只带结果或 id。
-
-屏障只留给绘制。业务若插入一条没有 target 的消息，后面的点击和生命周期都会停住。IdleHandler 也跑在主线程，只适合首帧之后很轻的注册，里面再做数据库就会变成下一次卡顿。
-
-post 和 sendMessage 进的是同一条队列。重任务 post 到主线程 Handler，执行仍在主线程，一样会 ANR。
-
-loop 无消息时会休眠，不是空转。
-
-子线程要先 prepare 再 loop。
+主线程已经在 `loop()` 里，不要再为「让界面动起来」新开一个 Looper。子线程如果只是做完一次网络就 `post` 回主线程，用线程池或协程即可，不必为这一次任务准备 Looper。只有「这条线程要长期、按顺序消化消息」才用 HandlerThread。消息的 `obj` 若放大图或整段 JSON，会占着队列直到执行；大对象在后台处理完，消息里只带结果或 id。`post` 与 `sendMessage` 进同一条队列，重活 `post` 到主线程 Handler 仍会 ANR。
 
 ## 使用与实践
 
@@ -128,6 +121,8 @@ class SignalWriter : HandlerThread("signal-writer") {
 边界：Activity 已经 `onDestroy`，工作线程仍 `post` 了一条更新 View 的消息。如果只在 `onDestroy` 里清队列，清完之后才 post 的那条仍会执行。所以 post 之前要看页面是否还活着，或者 post 出去的 Runnable 里先判断 `isDestroyed`。弱引用让 Runnable 拿不到 Activity 时直接返回，避免更新到一个正在销毁的 View 树上。
 
 另一条边界：`postDelayed(10_000)` 期间用户已经离开页面。不清消息，10 秒后 Runnable 仍持有 View。这就是上面那条泄漏链的实际触发条件，不是 Handler 对象本身泄漏。
+
+错误对照：只做静态 Handler + `WeakReference`，`onDestroy` 不 `removeCallbacksAndMessages`——队列里延迟消息到点仍执行，可能 NPE 或更新已销毁页面。
 
 ## 画面（text 结构图）
 

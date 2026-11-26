@@ -4,7 +4,9 @@ type: knowledge
 module: architecture
 title: SDK 对外 API 与架构边界
 priority: P0
-version: 2
+version: 3
+order: 40
+requires: [kp-componentization, kp-di]
 ---
 
 ## 一句话

@@ -4,7 +4,9 @@ type: knowledge
 module: compose
 title: Compose 与 View 混用
 priority: P0
-version: 2
+version: 3
+order: 40
+requires: [kp-compose-recomposition, kp-compose-side-effects]
 ---
 
 ## 一句话

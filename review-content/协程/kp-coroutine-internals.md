@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 挂起实现：状态机、CPS 与续体拦截
 priority: P1
-version: 2
+version: 3
 order: 100
 requires: [kp-coroutine-basics]
 ---
@@ -143,6 +143,15 @@ viewModelScope.launch {
 ```
 
 把 `yield()` 换成 `delay(0)`，循环仍是同步的，掉帧不会好，取消也要等到以后某个真正的挂起点。
+
+```kotlin
+// 错：以为 suspend 一定挂起（快路径 counter-example）
+suspend fun maybe(): Int {
+    val cached = cache.get()
+    if (cached != null) return cached // 不经过挂起点，栈上直接返回
+    return remote() // 这里才可能 COROUTINE_SUSPENDED
+}
+```
 
 ## 画面
 

@@ -4,86 +4,83 @@ type: knowledge
 module: jvm
 title: GC 基础与分代（面试口述）
 priority: P1
-version: 1
+version: 2
+requires: [kp-jvm-memory]
+order: 30
 ---
 
 ## 一句话
 
-JVM 用可达性判断垃圾，靠「大多数对象死得快」做分代：新生代用复制算法清得勤，老年代清得慢；Android 面试更关心泄漏和卡顿，而不是背收集器参数。
+JVM 用可达性（非引用计数）判垃圾，靠「多数对象朝生暮死」做分代：新生代复制、老年代整理或并发标记；Android 面试更要会分「泄漏（永远可达）」和「分配风暴（GC 勤 + STW 卡顿）」，而不是背收集器开关。
 
 ## 组成与结构
 
-口述时的地图：
+堆的分代地图与算法代价：
 
 ```text
 堆
-├─ 新生代 Young
-│   ├─ Eden        新对象大多在这
-│   └─ Survivor ×2 通常叫 S0 / S1，一空一用
-└─ 老年代 Old      熬过多次回收或太大的对象
+├─ Young: Eden + Survivor(S0/S1)，一次一空一用
+└─ Old: 熬过多次 Minor 或大对象直达
 ```
 
-判断垃圾有两条历史路线。引用计数实现简单，但循环引用计数永远不为 0，JVM 不用它当主方案。可达性分析从 GC Roots 出发顺着引用走，走不到的就是垃圾。GC Roots 包括：线程栈上的局部变量、静态字段、JNI 引用、同步锁持有的对象等。
-
-算法名要能对上代价：
-
-| 算法 | 做法 | 代价 |
+| 算法 | 适用 | 代价 |
 |------|------|------|
-| 标记-清除 | 标出存活，清掉其余 | 有碎片 |
-| 复制 | 把存活拷到另一半，整块清空 | 吞吐好，要留出空闲半区，适合存活少 |
-| 标记-整理 | 标出存活并挪到一端 | 没有碎片，移动对象贵，适合老年代 |
+| 标记-清除 | 老年代（CMS 收尾） | 碎片、浮动垃圾 |
+| 复制 | 新生代（存活少） | 需要空闲半区，移动少 |
+| 标记-整理 | 老年代 Serial/Parallel | 移动对象贵，无碎片 |
 
-收集器只点名：Serial / Parallel 是「年轻代复制 + 停顿」的经典组合；CMS 是老年代并发标记清除，碎片和浮动垃圾是它的历史问题；G1 按 Region 而不是整代硬切，追求可控停顿；ZGC 把停顿压到极低，知道名字即可。Android ART 有自己的并发 GC，不是 G1。
+收集器点名（专家只需要能说「停顿 vs 吞吐 vs 碎片」）：Serial/Parallel 年轻代复制 + STW；CMS 并发标记但 Concurrent Mode Failure 会退化成 Full GC；G1 Region 化、可设停顿目标；ZGC/Shenandoah 超低停顿（知道定位即可）。**ART** 自有并发/压缩策略，不是把 HotSpot G1 参数搬进 Android。
+
+GC Roots：栈局部、静态字段、JNI 全局、同步监视器、JVM 内部登记的对象等。跨代引用靠 **Remembered Set / 卡表**，Minor GC 不必每次扫整个老年代。
+
+四种引用：强（默认）、软（内存紧时收，可做缓存）、弱（下次 GC，如 `WeakHashMap`）、虚（跟踪对象回收事件，堆外收尾）。弱引用不消除强引用链上的泄漏。
 
 ## 原理
 
-1. **一次 Minor GC。** Eden 满了，从 Roots 和老年代指进来的引用出发，标记新生代存活对象，复制到空的那块 Survivor，年龄加 1。另一块 Survivor 和 Eden 整块清空。两块 Survivor 角色对调。因为绝大多数对象在这次就死了，复制的量很小。
-2. **晋升。** 年龄到阈值，或 Survivor 放不下，对象进老年代。大对象可能直接进老年代，避免在 Eden 和 Survivor 之间来回拷。
-3. **老年代与 Full GC。** 老年代空间不够、元空间要扩、`System.gc()` 的建议被采纳，都可能引发更重的回收。标记整理或并发标记期间，仍然会有停顿窗口（STW）：这段时间业务线程停在安全点，所以 GC 会变成卡顿。
-4. **跨代引用。** 老年代对象指向新生代时，Minor GC 不能只扫年轻代栈。卡表（remembered set 一类结构）记下这些引用，避免每次 Minor 都扫整堆。面试说出「有卡表，所以不是全堆」即可。
-5. **四种引用。** 强引用普通赋值，到不了就不是垃圾。软引用内存紧张时回收，适合缓存。弱引用下次 GC 就收，`WeakHashMap`、防泄漏的监听器包装用它。虚引用被回收时进队列，用来做堆外内存的收尾通知。Android 的 `WeakReference` 不能当成「不会泄漏」的万能药：逻辑若还要强引用路径，弱引用帮不上。
-6. **和泄漏的分界。** GC 只收不可达对象。静态集合、单例、未反注册的监听器、匿名内部类抓住的 Activity，都是可达的，GC 不会帮你删。卡顿则是短时间分配太多（例如在 `onDraw` 或滚动里 new 对象），Minor GC 变勤，主线程赶上停顿。
+1. **Minor GC 机制。** Eden 满 → 从 Roots + 卡表里老→幼引用出发标记存活 → 复制到空 Survivor，年龄 +1 → Eden 与旧 Survivor 清空 → S0/S1 对调。存活极少时复制成本低，这是分代的经济学基础。
+2. **晋升与分配失败。** 年龄达阈值、Survivor 装不下、大对象（`-XX:PretenureSizeThreshold` 等）可能直接进 Old。晋升过快会把「本可死在 Young」的对象堆进 Old，加速 Full GC。
+3. **Full GC / 重回收触发。** Old 满、元空间扩、显式 `System.gc()` 被采纳、CMS 并发阶段跟不上分配（Concurrent Mode Failure）、`GCLocker` 等。STW 窗口内业务线程在安全点停住——主线程赶上 Minor/Full 就会掉帧。
+4. **可达性 vs 泄漏。** GC 只收**不可达**对象。静态集合、单例、未反注册监听、非静态内部类握外部 Activity，都仍可达。卡顿则常是**分配速率**过高（滚动里每帧上万小对象），Minor 变勤。
+5. **并发标记的边界。** 并发标记期间应用仍在跑，会有浮动垃圾本轮收不掉；写屏障维护 Remembered Set。标错「Minor 扫全堆」——有卡表就只补跨代边，不是整堆标记。
+6. **与 Android 的衔接。** `Allocation`/`Android Studio Profiler` 看分配栈；`LeakCanary`/hprof 看强引用链。Bitmap 像素多在 Java 堆管理时代，native 层 fd/线程仍独立爆。对象池降分配但池太大 = 强引用泄漏，须测量后局部使用。
+
+专家对比：**引用计数**（CPython 循环引用要另行处理）JVM 不用作主方案；**手动 free**（C/C++）无自动，这里是自动但挡不住逻辑泄漏。
 
 ## 使用与实践
 
-Android 上的讲法：先区分「堆被活对象占满」和「分配速率太高导致频繁 GC」。前者抓 hprof，看从 GC Root 到 Activity 的路径，对症去掉静态 Context、取消注册、关闭游标。后者用 Allocation Tracker，看哪段代码在一帧里分配上万个小对象，改成复用或移出主线程。
+先判型：OOM 后 GC 仍满 → 泄漏路径；trace 里频繁 `GC_FOR_ALLOC` → 分配热点。前者砍 Root 链，后者改 `onDraw`/adapter 里的临时对象。
 
-不要指望 `System.gc()` 当修复手段。它只是建议，而且可能把卡顿集中打出来。
-
-Bitmap 在新版本 Android 上像素数据也更受 Java 堆管理，但 fd、线程、native 层仍会单独爆。口述时把 Java 堆 GC 和 native 分开，避免一问 OOM 就只答「加内存」。
-
-对象池可以降低分配速率，但池本身是强引用，池太大就是泄漏。只对确实测量过的热点做。
+别用 `System.gc()` 当用户体验修复；别用弱引用包 Activity 却留 Handler 非静态内部类的强链。
 
 ## 例子
 
 ```java
 static final List<byte[]> pin = new ArrayList<>();
 void leak() {
-    pin.add(new byte[1_000_000]); // 静态可达，Full GC 也收不走
+    pin.add(new byte[1_000_000]); // 静态可达，任何 GC 都删不掉
 }
-
 void churn() {
-    byte[] tmp = new byte[1_000_000]; // 方法结束不可达，Minor 就能收
-    use(tmp);
+    for (int i = 0; i < 10_000; i++) new byte[1024]; // 方法内短命，Minor 可收
 }
 ```
 
-分代口述例：请求进来 new 一万个短命 DTO，死在 Eden，Survivor 里只留下要进缓存的那几个；缓存若用强引用的静态 Map 无上限，它们会晋升并最终把老年代填满。
+错例：以为 `WeakReference<Activity>` 就够，同时 `Handler(Looper.getMainLooper())` 非静态内部类仍握 Activity → 强链在消息队列。对例：静态 + 匿名内部类持 Context 同样是泄漏范式。
+
+口述分代：一万个请求 DTO 死在 Eden；误用无界 `LruCache` 强引用全晋升 → Old 满 → 长 STW。
 
 ## 画面
 
 ```text
-新对象 -> Eden
-Eden 满 -> Minor GC
-  垃圾：清掉
-  存活：拷到空 Survivor，年龄+1
-  年龄够或空间不够 -> Old
-Old 满 -> 更重的 GC，停顿更明显
+new -> Eden
+Eden 满 -> Minor（复制到 Survivor，年龄+1）
+够老 / 太大 -> Old
+Old 压力 -> Full / 并发失败 -> 长停顿
 ```
 
 ## 常见坑与追问
 
-1. **用引用计数解释 JVM GC。** 追问：两个对象互相引用、再没有外部引用，计数为什么不为 0？所以 JVM 用可达性。
-2. **把 Minor GC 说成会扫描整堆。** 追问：老年代指向年轻代怎么办？卡表记录这些跨代引用。
-3. **WeakReference 包一层 Activity 就觉得不泄漏。** 追问：如果 Message 还排队，并且 Handler 是内部类持有 Activity 呢？那是强引用路径，弱引用没包到那条路径就没用。
-4. **背了 G1 参数但说不清卡顿。** 追问：Android 主线程卡在 GC 时你怎么证？看 traces 或 Perfetto 里的 GC 停顿，以及当时的分配堆栈，而不是改 JVM 的 `-Xmx`。
+1. **引用计数解释 JVM。** 追问：A↔B 互相引用无外部引用，计数为何不为 0？故用可达性。
+2. **Minor 扫描整堆。** 追问：老指向幼？卡表记跨代引用。
+3. **WeakReference 防一切泄漏。** 追问：Handler 内部类、静态 Context 呢？强链在就不收。
+4. **背 G1 参数不谈卡顿证据。** 追问：主线程卡 GC 怎么证？systrace/Perfetto 看 GC 段 + Allocation 栈。
+5. **把 GC 当泄漏解药。** 追问：泄漏定义？仍可达；该改代码路径，不是调 `-Xmx`。

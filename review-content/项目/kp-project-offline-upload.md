@@ -4,7 +4,9 @@ type: knowledge
 module: project
 title: 离线包与上传 SDK
 priority: P0
-version: 2
+version: 3
+order: 30
+requires: [kp-framework-stack, kp-project-im]
 ---
 
 ## 一句话

@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: Flow 背压、操作符与 Android 收集
 priority: P0
-version: 2
+version: 3
 order: 90
 requires: [kp-coroutine-flow]
 ---
@@ -160,6 +160,30 @@ STOPPED 超过 5 秒          上游协程取消，请求在挂起点退出
 若策略是 `Eagerly`，上面每一次 STOPPED 上游都不停。若在界面里直接收集冷流、没有 `stateIn`，每一次重新 STARTED 都会新开一次请求，没有「旧值先顶上」这回事，除非你自己把最后一帧存在别处。
 
 `Channel` 和 `SharedFlow` 对同一次点击的差别：`Channel.trySend` 把事件交给单个消费者，容量满了要看这次发送的结果，可能丢。`MutableSharedFlow.tryEmit`（`replay = 0`，额外缓冲 1）让当时所有订阅者都收到；当时没人订阅则这次没了。两个界面同时收集 Channel 转成的流，事件会被分给其中一边，不是各拿一份。两个界面收集 `SharedFlow`，才会各拿一份。状态用 `StateFlow`；「只处理一次的工作队列」用 `Channel`。
+
+错误对照（Android 收集侧）：
+
+```kotlin
+// 错：在 Composable 函数体里 collect 冷流
+@Composable
+fun Search(repo: Repo) {
+    var list by remember { mutableStateOf(emptyList<Item>()) }
+    LaunchedEffect(Unit) {
+        repo.searchFlow().collect { list = it } // 应 stateIn + collectAsStateWithLifecycle
+    }
+}
+
+// 错：stateIn 之后才 catch
+val ui = raw
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Loading)
+    .catch { emit(Error) } // catch 在 StateFlow 后无效；上游异常已杀掉共享协程
+
+// 错：Navigation 写进 StateFlow 当前值
+_state.value = _state.value.copy(navTarget = "settings")
+// 从后台回来又 navigate 一次
+
+// 对：导航走 replay=0 的 SharedFlow，页面 LaunchedEffect 里 collect 一次
+```
 
 ## 画面
 

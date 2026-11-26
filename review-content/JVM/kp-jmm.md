@@ -4,55 +4,48 @@ type: knowledge
 module: jvm
 title: Java 内存模型 JMM
 priority: P0
-version: 1
+version: 2
+requires: [kp-jvm-memory]
+order: 40
 ---
 
 ## 一句话
 
-JMM 规定多线程下哪些写一定能被哪些读看见；它不是堆和栈那张内存地图，而是用 happens-before 把原子性、可见性、有序性三件事说成可检查的规则。
+JMM 规定多线程下哪些写对哪些读**必定可见**、哪些重排**不被允许**；它不是堆栈地图，而是用 happens-before 把原子性、可见性、有序性收成可检查的规则——没有 hb 边就没有「应该看见」的保证。
 
 ## 组成与结构
 
-先把两张图分开，否则和「运行时数据区」答串：
+与运行时数据区对题分栏，防答串：
 
 | | 运行时数据区 | JMM |
 |--|----------------|-----|
-| 回答 | 对象在哪、栈在哪 | 另一条线程能不能看见这次写、会不会看见重排 |
-| 典型题 | OOM、栈溢出 | volatile、锁、双重检查、安全发布 |
+| 问什么 | 对象、引用在哪 | 线程 B 何时能看见线程 A 的写 |
+| 典型题 | OOM、栈溢出 | volatile、DCL、安全发布 |
 
-三个现象：
+三现象与 JMM 手段：
 
-- 原子性：一个动作中间会不会被插入。`long` 在 32 位上的非 volatile 写可能撕裂；`i++` 即使在 64 位也不是一条指令。
-- 可见性：写有没有对别的线程成为可见。没有同步时，可以一直留在寄存器。
-- 有序性：编译器、CPU、内存系统可以重排，只要单线程看起来一样（as-if-serial）。多线程能看见「源码里不存在的中间态」。
+- **原子性**：`i++` 非单指令；`long/double` 非 volatile 写可能撕裂（64 位上仍要理解语义层复合操作）。
+- **可见性**：写可能停留在寄存器/缓存，无同步时其他线程可永久读旧值（数据竞争下甚至允许怪异中间态）。
+- **有序性**：编译器、CPU、缓存一致性协议在满足单线程 as-if-serial 前提下可重排。
 
-同步动作把这些收紧：volatile 读写、监视器加解锁、`start` / `join`、默认值写入、线程中断的检测。它们之间建立 happens-before。程序次序只在同一线程内成立。
-
-Kotlin 跑在同一模型上。`@Volatile`、`synchronized`、`java.util.concurrent` 的原子类和锁，规则与 Java 相同。协程切换线程不额外创造内存屏障；你仍要靠这些同步动作，或靠「状态只在一个线程上改」。
+同步动作建立 hb：`volatile` 读写、监视器 unlock→lock、`Thread.start/join`、对 `final` 字段的正确冻结、原子类中 volatile 语义的操作等。Kotlin `@Volatile`、`synchronized`、`j.u.c` 与 Java 同一模型；协程换线程不自带屏障。
 
 ## 原理
 
-1. **as-if-serial 与重排。** 单线程里 `a = 1; b = 2;` 若后面只用 b，把 a 的写挪走甚至删掉都可以，只要该线程的结果不变。JMM 允许这种优化。另一条线程如果没有任何 hb 关系去读 a，它看见的可以是旧值，甚至在存在数据竞争时允许出现更奇怪的结果。所以数据竞争不是「偶尔旧一点」，而是程序失去顺序一致性。
-2. **happens-before 不是时间先后。** A 在墙上时钟更早，不代表 B 看得见 A。只有规则把它们连起来才算。常用链：同一线程里前面的普通写 hb 后面的 volatile 写（程序次序），这次 volatile 写 hb 另一线程后来的 volatile 读，那次读 hb 它后面的普通读。传递之后，第一批普通写对第二线程可见。这就是安全发布。
-3. **锁的 hb。** 解锁 hb 随后的加锁。临界区里的写，下一个进入同一监视器的线程都看得见。所以 `synchronized` 同时给你互斥和可见性，不只是排队。
-4. **start 与 join。** 父线程在 `start()` 之前的写，对子线程可见。子线程里的写，对 `join()` 成功返回之后的父线程可见。自己 `new Thread(() -> read(x)).start()` 之前把 x 写好，不必再 volatile，靠的就是 start 这条边。
-5. **final 的冻结。** 构造函数里对 final 字段的写，hb 构造函数结束。只要没有在构造完成前把 `this` 泄漏出去，其他线程通过安全手段拿到引用后，final 字段就是构造时的值。不可变对象能少用锁，靠的是这条，而不是「final 等于 volatile」。final 不保证你看见的是最新一次「重新构造」，它保证的是看见的那次构造是完整的。
-6. **原子类的位置。** `AtomicInteger` 的 `compareAndSet` 既是原子的读改写，也带有 volatile 读写的可见性。它解决的是一个变量。两个原子变量之间没有 hb，除非你自己用一个原子引用把它们包成一次发布。
+1. **as-if-serial 与数据竞争。** 单线程内可重排只要结果等价。另一线程若无 hb 与之关联去读共享可变状态，就属于数据竞争——JMM **不承诺**顺序一致性，不只「偶尔旧一点」。这是 JSR-133 修复早期 JMM 漏洞后的核心态度。
+2. **happens-before 不是墙钟先后。** 墙上 A 早于 B 不代表 B 必见 A。规则链例：线程内写 x、写 y → `volatile write ready` → 他线程 `volatile read ready` 之后读 x、y，前面普通写对被挂上的读者可见（volatile 夹住语义：写侧 release，读侧 acquire）。
+3. **监视器 hb。** unlock hb 后续任意线程的 lock 同一把锁。临界区内写对下一进入者可见；`synchronized` 同时给互斥 + 发布，不是「仅排队」。
+4. **start / join。** `start()` 之前的父线程写 hb 子线程动作；子线程写 hb `join()` 成功返回后父线程读。子线程读父提前写好的配置不必再 volatile——边在 start 上。
+5. **final 字段冻结。** 构造器中对 final 的写在正确构造完成前 hb 初次可见该对象的读者（无 this 逃逸时）。不可变对象少锁靠的是「一次引用发布带上所有 final」，不是「final 等同 volatile」。**错误构造器泄漏 this** 会破坏冻结保证。
+6. **复合发布与原子类边界。** `AtomicInteger` 的 CAS/volatile 语义管**一个**变量；两个原子字段之间无天然 hb，除非用 `AtomicReference` 一次打包发布，或同锁保护。`VarHandle`（Java 9+）提供更细粒度访问模式，面试知道是 volatile/CAS 的一般化即可。
 
-双重检查、懒汉单例、配置对象发布，都是第 2 步的应用，细节放在 volatile 那篇，这里要能把链画出来。
+与 C++11 对比（专家一句）：Java `volatile` ≈ release/acquire 对该字段；不要声称 volatile 串行化整个程序。
 
 ## 使用与实践
 
-写共享状态时只选一种风格，不要混：
+共享状态选一种主风格：同锁、volatile 引用 + 不可变快照、原子变量、或单线程封闭（`HandlerThread`/单线程 Dispatcher）。队列把「消息对象填好再入队」依托队列实现的内部同步建立 hb。
 
-- 一把锁包住所有相关字段。
-- 一个 volatile 引用，指向不再修改的不可变对象。
-- 原子类做单个计数或开关。
-- 把状态封闭在一条线程（线程封闭）：HandlerThread、单线程池、协程的单线程 Dispatcher。封闭之后别的线程只通过队列交消息，消息对象在入队前填好，队列实现内部有 hb。
-
-不要用「睡 10 毫秒再读」当同步。那只是把竞争窗口变窄，JMM 不承认它。
-
-和 C++ 内存序相比，Java 面试把 volatile 说成「释放/获取」就够用：写是释放，读是获取，中间的普通读写被夹住。不要声称 volatile 等于全屏障把所有无关变量都串行化。
+禁止「sleep 一下再读」当同步。DCL 单例细节在 volatile 专篇，JMM 层要能画出「先数据后 flag/引用」的发布顺序。
 
 ## 例子
 
@@ -62,35 +55,31 @@ class Config {
     final String name;
     Config(int n, String name) { this.n = n; this.name = name; }
 }
-
 class Publisher {
     volatile Config c;
     void publish() { c = new Config(1, "ok"); }
     void read() {
         Config local = c;
-        if (local != null) {
-            use(local.n, local.name); // 必能看见构造里的写入
-        }
+        if (local != null) use(local.n, local.name);
     }
 }
 ```
 
-错误示例是先写 volatile 标志，再写普通字段：读者看到标志后去读字段，字段的写没有 hb 到这次标志写之前，仍然可能是零值。顺序必须是「先填数据，后发布标志或引用」。
+错例：先 `volatile ready = true` 再写普通字段 data——读者见 ready 后读 data 可能仍是 0，因为 data 的写没有 hb 到 ready 写**之前**对读者的可见链。必须先完成 data 再发布 ready/引用。
 
 ## 画面
 
 ```text
-线程 A                         线程 B
-普通写 x、y
-volatile 写 ready  -------- hb -------->  volatile 读 ready
-                                        其后的读 x、y 看见 A 的写
-
-没有这条 volatile/锁/start 的边：B 可以一直看不见
+线程 A: 写 x,y → volatile ready=1
+              -------- hb -------->
+线程 B:               volatile 见 ready → 读 x,y 应见 A 的写
+无 volatile/锁/start 边：B 可一直不见
 ```
 
 ## 常见坑与追问
 
-1. **把 JMM 答成堆、栈、方法区。** 追问：那叫运行时数据区。JMM 问的是跨线程可见性。
-2. **以为同一进程的线程共享堆就自动可见。** 共享地址只说明写的是同一块内存，不说明缓存和重排会立刻让你看见。追问：那要什么？hb 的边。
-3. **在构造函数里启动线程并传入 this。** final 的保证被逸出破坏。追问：怎样才算安全发布？构造完成后再把引用赋给 volatile 字段、或者在锁里发布。
-4. **两个 volatile 标志想互相证明。** 对 a 的写和对 b 的写若没有程序次序上的「先数据后发布」，读者仍会撕裂。追问：不可变对象一次发布解决了什么？一次引用写带上所有 final 字段。
+1. **JMM 答成堆栈图。** 追问：那叫运行时数据区；JMM 是跨线程语义。
+2. **同堆即立即可见。** 追问：要什么？hb 边；缓存与重排不保证。
+3. **构造器里 this 逸出给新线程。** 追问：final 还安全吗？不安全，要构造完成后再 volatile 发布。
+4. **两个 volatile 互证顺序。** 追问：若无「先数据后发布」的单引用写，读者仍可能撕裂；不可变对象一次发布解决整包字段。
+5. **协程「切到 Main 就安全」。** 追问：Main 上仍要不变式与封闭；换 Dispatcher 不替代 hb。

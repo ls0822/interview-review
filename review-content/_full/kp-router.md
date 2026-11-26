@@ -4,7 +4,9 @@ type: knowledge
 module: architecture
 title: 路由原理
 priority: P0
-version: 2
+version: 3
+order: 30
+requires: [kp-componentization]
 ---
 
 ## 一句话

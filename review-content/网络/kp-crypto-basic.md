@@ -4,7 +4,8 @@ type: knowledge
 module: network
 title: 对称加密、非对称加密与摘要
 priority: P0
-version: 2
+version: 3
+order: 20
 ---
 
 ## 一句话

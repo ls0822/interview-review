@@ -4,102 +4,97 @@ type: knowledge
 module: concurrent
 title: volatile、可见性与 happens-before
 priority: P0
-version: 1
+version: 2
+requires: [kp-jmm, kp-thread-basics]
+order: 20
 ---
 
 ## 一句话
 
-`volatile` 保证单个变量的写能被别的线程看见，并限制它和周围读写的重排序；它不把 `i++` 变成原子操作。happens-before 是 JMM 用来规定「谁一定看得到谁」的规则，不是墙上时钟的先后。
+`volatile` 让单次读/写对其它线程可见，并约束它与周围普通读写的重排；它不把 `i++` 变成原子。happens-before 规定「谁一定看得见谁」，不是墙上时钟的先后。
 
 ## 组成与结构
 
-三个问题要拆开，面试官说「线程安全」时经常揉在一起：
+面试官说「线程安全」时，把三件事拆开：
 
-| 问题 | 现象 | volatile 管不管 |
-|------|------|-----------------|
-| 原子性 | 读-改-写中间被插入 | 不管复合动作 |
-| 可见性 | 写在自己缓存/寄存器里，别人一直读旧值 | 管这个变量的读写 |
-| 有序性 | 编译器、CPU 换序，只要单线程结果不变 | 管这个变量的屏障 |
+| 维度 | 现象 | volatile |
+|------|------|----------|
+| 原子性 | 读-改-写被插入 | 不管复合动作 |
+| 可见性 | 写留在寄存器/缓存 | 管该变量读写 |
+| 有序性 | 编译器/CPU 重排 | 该变量的屏障 |
 
-happens-before（后文简称 hb）是一组偏序。若 A hb B，则 A 的写对 B 可见，且 A 不会被重排到 B 之后。和 volatile 相关的核心规则：
+与 volatile 直接相关的 hb 规则（后文 hb = happens-before）：
 
-- 对 volatile 字段的写，hb 随后对同一字段的读。
-- 监视器解锁 hb 随后对同一把锁的加锁。
-- 线程 `start()` hb 该线程里的任何动作；线程里的动作 hb 另一线程从 `join()` 成功返回。
-- 程序次序：同一线程里，前面的动作 hb 后面的动作（单线程语义）。
-- 传递性：A hb B 且 B hb C，则 A hb C。
+- 对 volatile 写 hb 随后对同一 volatile 读。
+- 监视器解锁 hb 随后对同锁加锁。
+- `start` hb 子线程动作；子线程动作 hb `join` 成功返回。
+- 同线程程序次序：前 hb 后（仅此线程内）。
+- 传递：A hb B，B hb C → A hb C。
 
-Kotlin 的 `@Volatile` 编译成同一个 JVM 标志，规则相同。
+Kotlin `@Volatile` 编译为同一 JVM 标志，语义相同。
 
 ## 原理
 
-分四步讲清楚「为什么没有它会看不见」以及「为什么有它仍不能 `count++`」。
+**P0：没有同步时的工作内存。** 线程可把变量缓存在寄存器；JIT 可能把 `while (!flag)` 提成只读一次 flag。在无 hb 边时，JMM 允许别的线程一直看不见更新——不是「偶尔旧」，是模型允许。
 
-1. **工作内存不是第二块堆。** JMM 允许线程把变量留在寄存器或 CPU 缓存里，不必每条字节码都回写主内存。线程 B 的循环 `while (!flag)` 可能被 JIT 提成「读一次 flag，后面只看寄存器」。这不是 Java 语言故意藏数据，是在没有同步动作时，模型允许这种优化。
-2. **volatile 写的效果。** 写 volatile 会插入释放屏障：这次写之前的普通写不能排到这次写之后，并且写会刷到对其他线程可见的地方。随后的 volatile 读是获取屏障：读之后的普通读不能排到这次读之前，并且能看到这之前的 volatile 写以及该写之前的普通写（靠传递）。所以「先把对象字段填好，再写 volatile 引用」是安全发布；反过来就不安全。
-3. **它不是互斥。** `volatile int n; n++;` 仍是读、加、写三条动作。两个线程都读到 10，都写回 11，更新丢一次。volatile 只保证你读到的是某次完整的写，不保证读改写独占。计数用 `AtomicInteger` 或放进锁里。
-4. **双重检查锁为什么必须 volatile。** `instance = new Singleton()` 在字节码层至少是：分配内存、调用构造、把引用赋给 `instance`。没有 volatile 时，后两步可以重排，别的线程在第一个 `if (instance != null)` 看到非空引用，对象里的字段还是零值。给 `instance` 加 volatile 后，构造里的写 hb 这次引用写，引用写 hb 另一线程的读，于是读到引用的线程一定看到构造完成。静态内部类单例靠类初始化锁，不必再加这层 volatile，那是另一条 hb（类初始化动作 hb 初始化之后的使用）。
+**P0：volatile 写 ≈ 释放屏障。** 写前普通写不能排到写后；写刷到对后续 volatile 读可见的位置。volatile 读 ≈ 获取屏障：读后的普通读不能排到读前；并能看见此前 volatile 写及该写之前的普通写（靠传递）。「先填字段，再写 volatile 引用」= 安全发布；先写引用后填字段 = 别人见半成品。
 
-`final` 字段也有安全发布：构造函数里对 final 的写 hb 构造结束，只要 `this` 没有在构造完成前逸出，其他线程看到这个引用时 final 字段已是构造时的值。这是不可变对象能少用锁的原因之一。
+**P0：不是互斥。** `volatile int n; n++;` 仍是三条指令，可能丢更新。计数用 `Atomic*` 或锁。
+
+**专家加分：DCL 与重排。** `instance = new X()` 可能重排为：分配 → 引用赋值 → 构造。别线程见非 null 但字段零值。`volatile` 引用写建立 hb，堵住这条洞。静态内部类 / 枚举单例靠类初始化 hb，不必 DCL。
+
+**失败模式（数据竞争）：** 两个线程无 hb 地读写同一非 volatile 变量，程序可表现出源码不存在的中间态，不只是「读旧」。多个 volatile 拼不变式：写 a、写 b 无互斥，读者可见新 a 旧 b——应一次 volatile 发布不可变快照。
+
+**专家加分：64 位与 volatile long。** 32 位 JVM 上非 volatile `long` 写可能撕裂；volatile long/double 读写原子，但 `++` 仍非原子。
 
 ## 使用与实践
 
-适合 volatile 的典型只有两类：状态标志（`shutdown`、`ready`，一写多读，写本身是原子的布尔或引用赋值），以及安全发布一个「写好之后不再改」的对象引用。
+适合：一写多读的状态标志（`shutdown`、`ready`）、安全发布写好即不变的对象引用。
 
-不适合：计数器、先检查再行动（`if (!flag) flag = true` 仍有竞态）、需要和多字段一起一致的不变式。多字段要么收进一个不可变对象用 volatile 一次发布，要么整段放进锁。
+不适合：计数、`if (!flag) flag=true`、多字段不变式。多字段 → 不可变对象 + volatile 引用，或整段锁。
 
-Android 上主线程读一个后台线程写的 `volatile` 配置是可以的；但「volatile 的 List」只保护引用本身，不保护 `ArrayList` 内部结构。发布之后还改列表，仍然数据竞争。
-
-协程里共享可变状态优先 `Mutex` 或单线程 Dispatcher，不要以为 `@Volatile` 能替代临界区。
+Android：主线程读后台写的 `volatile` 配置可以；`volatile` 的 `List` 只保护引用，列表内部仍要并发容器或锁。协程共享状态优先 `Mutex` / 单线程 Dispatcher，勿用 `@Volatile` 顶替临界区。
 
 ## 例子
 
 ```java
+// 对：x 写 hb ready 写；B 见 ready==true 必见 x==42
 class Holder {
     int x;
     volatile boolean ready;
-    void publish() { x = 42; ready = true; } // x 的写 hb ready 的写
-    void consume() {
-        if (ready) { // ready 的读，看到 true 则一定看得到 x==42
-            System.out.println(x);
-        }
-    }
-}
-
-class Dcl {
-    static volatile Dcl instance;
-    static Dcl get() {
-        Dcl local = instance;
-        if (local == null) {
-            synchronized (Dcl.class) {
-                local = instance;
-                if (local == null) {
-                    instance = local = new Dcl();
-                }
-            }
-        }
-        return local;
-    }
+    void publish() { x = 42; ready = true; }
+    void consume() { if (ready) use(x); }
 }
 ```
 
-先把 `instance` 读进局部变量，是为了 volatile 读只发生一次，后面用局部变量，避免重复读屏障。这是写法细节，原理仍是那条 hb。
+```java
+// 错：flag 非 volatile，B 可能永远 true 循环或见寄存器旧值
+class Bad {
+    boolean flag;
+    void run() { while (!flag) { } }
+}
+
+// 错：DCL 未 volatile instance
+static Singleton instance; // 别线程见非 null 半成品
+```
+
+DCL 正写：局部变量缓存 `instance`，减少重复 volatile 读；`static volatile Singleton instance` 在双重检查内赋值。
 
 ## 画面
 
 ```text
-线程 A                         主内存                      线程 B
-x = 42
-写 volatile ready=true  ----->  x、ready 对后续读可见
-                               ready==true  ------------>  if (ready)
-                                                          必能读到 x==42
+线程 A                    主内存 / hb 边                 线程 B
+x=42
+volatile ready=true ----> ready 写 hb 后续 ready 读 ----> if(ready)
+                                                         必见 x==42
 
-没有 volatile 时，B 可以一直看寄存器里的 ready=false
+无 volatile：B 可缓存 flag=false，与 A 无 hb
 ```
 
 ## 常见坑与追问
 
-1. **用 volatile 做 `i++`。** 追问：64 位 `long` 的普通写在 32 位 JVM 上为什么还可能撕裂？因为一次写被拆成两次；volatile 的 long/double 读写是原子的，但 `++` 仍不是。
-2. **以为 hb 等于「代码行号更早」。** 不同线程没有程序次序。只有同步动作（锁、volatile、start/join、线程初始化）把它们连起来。追问：没有同步时，数据竞争的程序在 JMM 下可以出现什么？可以出现你在源码里写不出的值。
-3. **DCL 漏 volatile，或在构造里把 `this` 交给别的线程。** 逸出会让别人在 hb 建立前就拿到半成品。追问：枚举单例、静态内部类为什么常常不再写 DCL？类初始化本身有锁和 hb。
-4. **多个 volatile 变量想拼出一个不变式。** 对 a 的写和对 b 的写之间没有互斥，读者可以看见新 a 旧 b。追问：怎么一次发布？把 a、b 放进不可变对象，只 volatile 写引用。
+1. **volatile 做 `i++`。** 错法：多线程 `volatile` 计数。追问：为何 long 在 32 位要 volatile？防撕裂，不防 ++。
+2. **以为 hb = 行号更早。** 错法：两线程普通写默认可见。追问：无同步的数据竞争最坏？可见不可能的值组合。
+3. **DCL 漏 volatile 或构造逸出 `this`。** 追问：枚举单例为何安全？类初始化锁 + hb。
+4. **多 volatile 拼不变式。** 错法：volatile a、b 分别改。追问：一次发布？不可变对象 + 一次 volatile 写引用。
+5. **`volatile` 集合当线程安全。** 错法：发布后仍 `list.add`。追问：引用切换原子 ≠ 内部结构原子。

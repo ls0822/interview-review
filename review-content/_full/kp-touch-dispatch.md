@@ -4,7 +4,9 @@ type: knowledge
 module: android
 title: 触摸事件分发与滑动冲突
 priority: P0
-version: 2
+version: 3
+order: 30
+requires: [kp-activity-lifecycle]
 ---
 
 ## 一句话
@@ -61,7 +63,7 @@ Activity.dispatchTouchEvent
 
 子比父更知道自己能不能滑。例如竖向列表滑到顶了，再往下拉应该交给外层刷新。子在确认「这是我的方向，而且我还滑得动」时调用 `requestDisallowInterceptTouchEvent(true)`，父这一段不要截。子滑到边缘滑不动了，再把 disallow 设回 false，父才能接下一段。
 
-父要配合：在 `onInterceptTouchEvent` 里如果子已经 disallow，就不要拦截。只调了子、父的拦截逻辑仍无条件返回 true，这句话没有用。
+父要配合：在 `onInterceptTouchEvent` 里如果子已经 disallow，就不要拦截。只调了子、父的拦截逻辑仍无条件返回 true，这句话没有用。很多父布局在 DOWN 时会清 disallow，子要在确认方向的 MOVE 里再 `requestDisallowInterceptTouchEvent(true)`。列表嵌套还要注意多指：用 `actionMasked` 和指针 id，不要假设永远只有 index 0。
 
 **5. 点击为什么会被触摸吃掉**
 
@@ -71,17 +73,7 @@ Activity.dispatchTouchEvent
 
 NestedScrolling 让子在自己消费之前和之后，把剩余位移报给父。父先有机会消耗一段（例如先折叠顶栏），子再滑自己的内容，子滑完还可以把剩下的再给父。CoordinatorLayout、AppBar 就是这条协议。能用嵌套滑动就不要在两层里各写一套互相矛盾的拦截。
 
-同一条序列里，父一旦在某个 MOVE 上返回拦截，后面的 MOVE 和 UP 都不再询问子，子收到的是 CANCEL。所以父的判断要稳：刚过阈值就拦截、下一帧又发现其实是纵向，已经来不及把序列还给子。阈值和方向比要一次定准。列表嵌套时还要注意多指：第二根手指落下会带来 `ACTION_POINTER_DOWN`，自己算位移如果只看 index 0，可能把另一根手指的移动当成方向突变。用 `actionMasked` 和指针 id，不要假设永远只有一根手指。
-
-内部拦截还有一个时序：很多父布局在 DOWN 时会把 disallow 清掉，准备重新决定方向。子如果只在 DOWN 里调用一次 `requestDisallowInterceptTouchEvent(true)`，下一个 MOVE 父又可以拦截。所以声明要放在确认方向之后的 MOVE 里，并且父的拦截代码要真的尊重这个标志。
-
-嵌套滑动把「父先消耗一段、子再消耗、剩下的再还给父」说成协议，比两层 onIntercept 对着抢清楚。外部拦截适合父明确只吃横向；内部拦截适合子更知道自己还能不能滑。DOWN 阶段父不要拦截，否则子里的按钮连序列开头都拿不到。斜滑时要同时超过 slop 并且横向明显大于纵向，只判断 dx 大于 0 会把纵向列表截断。子收到 CANCEL 时要收起按下态。OnTouchListener 如果只是打日志，必须返回 false，否则点击识别不会发生。
-
-父在 DOWN 时常常会清掉 disallow，所以子要在 MOVE 里、确认是自己的方向并且还能滑时，再次请求父不要拦截。父的拦截函数如果无条件返回 true，这个请求没有用。多指用 actionMasked，不要假设永远只有一根手指。
-
-讲清谁消费横向、谁消费纵向，比背完整公式重要。
-
-序列被父截走之后，子要在 CANCEL 里恢复按下态。
+父一旦在某次 MOVE 上拦截，后续 MOVE/UP 不再问子，子会收到 CANCEL；阈值和横纵比要一次定准，否则来不及把序列还给子。
 
 ## 使用与实践
 

@@ -4,100 +4,112 @@ type: knowledge
 module: language
 title: 扩展函数与高阶函数
 priority: P0
-version: 1
+version: 2
+order: 90
+requires: [kp-oop-basics, kp-generics]
 ---
 
 ## 一句话
 
-扩展函数是编译成静态方法的语法糖，没有运行时多态；高阶函数把函数当参数，`inline` 用来消掉 Lambda 对象，并让 `reified` 在调用点看见具体类型。
+扩展函数是编译成「接收者作首参的静态方法」的语法糖，解析看静态类型、没有运行时多态；高阶函数把函数当值，`inline` 用来消灭 Lambda 对象并让 `reified` 在调用点看见具体类型。
 
 ## 组成与结构
 
-扩展写在被扩展类型的外面：`fun String.lastChar(): Char`。编译后大致是 `StringKt.lastChar(String receiver)`，Java 就按这个静态方法调用。顶层函数同样进「文件名 + Kt」的类，可用 `@file:JvmName` 改类名。
+```text
+  扩展 fun T.foo()  →  FooKt.foo(T receiver)
+  高阶 (T) -> R       Lambda / 函数引用
+  inline/noinline/crossinline
+  SAM / fun interface
+  成员优先于扩展
+```
 
-高阶函数的参数或返回值是函数类型，例如 `(Int) -> Boolean`。Lambda `{ it > 0 }` 是函数字面量。若 Lambda 是最后一个参数，调用时可以放到括号外，这是尾随 Lambda。
+| 机制 | 解决什么 | 档位 |
+|------|----------|------|
+| 扩展 | 不改第三方类加调用写法 | P0 |
+| 成员优先 | 扩展不能假扮重写 | P0 |
+| `inline` | 热路径零 Function 对象 | P0 |
+| `reified` | 擦除后仍能 `T::class` | 专家加分 |
+| `fun interface` | Kotlin SAM | P0 |
 
-| 机制 | 解决什么 |
-|------|----------|
-| 扩展 | 给别人的类型加调用写法，不改原类 |
-| 成员优先 | 同签名时成员赢，扩展不能偷偷覆盖成员 |
-| SAM / `fun interface` | 单抽象方法可以用 Lambda |
-| `inline` | 把函数体和 Lambda 贴进调用处 |
-| `noinline` / `crossinline` | 个别 Lambda 不要内联，或禁止非局部 return |
-| `reified` | 内联后能用 `T::class` |
-
-Java 的函数式接口（只有一个抽象方法，如 `Runnable`、`OnClickListener`）在 Kotlin 里可以直接写 Lambda。Kotlin 自己的接口要标 `fun interface` 才有同样的 SAM 转换。
+`@file:JvmName` 改 Java 看到的类名；顶层/扩展都进 `XxxKt`。
 
 ## 原理
 
-1. **解析在编译期。** 扩展的接收者静态类型决定调用哪个扩展。`open class A; class B : A()`，你对 `A` 写了扩展，对 `B` 又写了同名扩展。变量类型是 `A`、实际对象是 `B` 时，调用的仍是 `A` 的扩展。这和虚方法相反。所以扩展不能当多态的扩展点。
-2. **成员优先。** 类里已经有同签名成员时，扩展不会被选中。你不能用扩展去「重写」`toString` 或 SDK 的已有方法。
-3. **Lambda 的对象。** 非内联高阶函数在字节码里要把 Lambda 变成对象（匿名类或 invokedynamic）。它能访问外部变量，Kotlin 的 Lambda 可以改外部 `var`，编译器会用包装对象保存。每次调用都分配这个对象，在滚动或绘制热路径上会制造垃圾。
-4. **inline 贴进去。** `inline fun <T> List<T>.filter(...)` 会把循环和 Lambda 体复制到调用点，不再分配函数对象。代价是字节码变大，所以只对小而频繁、或需要 `reified` / 非局部 return 的函数 inline。公开 API 的大函数体不要 inline，调用方会膨胀，调试栈也会变怪。
-5. **非局部 return。** 内联 Lambda 里的 `return` 返回的是外层函数，而不是 Lambda 自己。这让 `forEach` 里能直接从 `fun` 返回。非内联 Lambda 不能这样，只能 `return@label`。`crossinline` 禁止这种非局部 return，因为 Lambda 可能被存起来稍后调用，那时外层函数已经不在栈上。
-6. **reified 依赖 inline。** 类型参数平时被擦除。inline 之后调用点知道具体类型，编译器把 `T::class.java` 换成具体的 class 字面量。所以 `reified` 不能用在接口的抽象方法、不能用在非 inline 函数、也不能用在递归且需要当普通函数引用传递的场合。
+1. **扩展静态解析。** 接收者**声明类型**决定扩展。`A` 引用指向 `B` 实例，调 `A` 上扩展，不进 `B` 扩展——与虚方法相反，不能当多态扩展点。
+2. **成员优先。** 已有同签名成员，扩展不会被选；不能「扩展重写」`toString`。
+3. **非 inline Lambda 成本。** 每次调用可能 `FunctionN` 分配；滚动列表热路径会 GC 压力。捕获 `var` 用引用对象包装。
+4. **inline 贴入。** 小循环式标准库 `map`/`filter` 展开到调用点。过大公开 inline 膨胀 DEX、混淆栈难读。
+5. **非局部 return。** 仅 inline Lambda 可 `return` 外层函数。`crossinline` 禁止，因 Lambda 可能延后执行。`noinline` 某参数仍要对象化。
+6. **reified 绑定 inline。** 类型参数只存活到编译；内联后调用点 `T::class.java` 是具体类。不能用于接口虚方法、非 inline 高阶。
 
 ## 使用与实践
 
-给本模块的类型加展示、映射、日志，用扩展，放在同一文件，不要散落到全局名字。SDK 对外的核心能力写成真正的成员或静态方法，因为 Java 调用方看不到「像成员一样的扩展」，还要记 `XxxKt`。
+模块内工具扩展放同包；SDK 核心能力用真实成员/static + `@JvmStatic`，Java 方能直接调。
 
-集合变换用标准库 `map` / `filter` / `flatMap`。需要提前结束用 `firstOrNull`、`any`，或内联作用域里的 `return`。热路径上自己写的、抓住 Lambda 的函数考虑 `inline`。
+Java 回调：`fun interface` 或 Java 接口，别只靠 Kotlin 函数类型（Java 侧 `Function1` 难用）。
 
-回调若要给 Java 用，定义 Java 接口或 `fun interface`，不要只给一个 Kotlin 函数类型。函数类型在 Java 里是 `Function1`，调用别扭。
-
-`apply` / `also` / `let` / `run` / `with` 是带接收者的高阶函数：`apply` 返回接收者，适合构建；`let` 适合空安全后的转换；`also` 适合插入日志而不改变值。不要套五层，读不懂就拆成局部变量。
+`apply`/`also`/`let`/`run`/`with`：构建用 `apply`，空安全链 `let`，副作用日志 `also`。套五层以上拆变量。
 
 ## 例子
 
-```kotlin
-fun String.lastChar(): Char = this[length - 1]
+**正确**
 
-inline fun <reified T> List<*>.firstOf(): T? {
+```kotlin
+fun String.lastCodePoint(): Int = codePointAt(length - 1)
+
+inline fun <reified T> List<*>.firstInstance(): T? {
     for (e in this) if (e is T) return e
     return null
 }
 
-fun interface Click {
-    fun onClick(id: Int)
-}
-
-fun bind(click: Click) {}
-
-fun demo(items: List<Any>) {
-    "hi".lastChar()
-    bind { id -> println(id) }          // SAM
-    val n = items.firstOf<String>()
-    listOf(1, 2, 3).filter { it > 1 }    // 尾随 Lambda，标准库 inline
-}
+fun interface Tap { fun on(id: Int) }
+fun bind(t: Tap) {}
+bind { id -> println(id) }
 ```
 
-Java 调用扩展：`StringExtKt.lastChar("hi")`，类名以文件为准。
-
-非局部 return：
+**错误对照：用扩展「覆盖」成员**
 
 ```kotlin
-fun containsEmpty(list: List<String>): Boolean {
+fun View.show() { visibility = View.VISIBLE }
+// 若 View 已有 show() 语义不同的成员？不会选你的扩展；混淆靠 import/静态解析
+```
+
+**错误对照：期望扩展多态**
+
+```kotlin
+open class A
+class B : A()
+fun A.tag() = "A"
+fun B.tag() = "B"
+fun demo(a: A) = a.tag() // 永远 "A"，即便 a 是 B
+```
+
+**错误对照：非 inline 里非局部 return**
+
+```kotlin
+fun findEmpty(list: List<String>, pred: (String) -> Boolean) {
     list.forEach {
-        if (it.isEmpty()) return true // 从 containsEmpty 返回
+        if (pred(it)) return // 非法：Lambda 非 inline
     }
-    return false
 }
 ```
 
 ## 画面
 
 ```text
-"hi".lastChar()
-    编译期选定静态方法 StringKt.lastChar("hi")
-    运行期不看 "hi" 的子类
+"hi".lastCodePoint()
+  → StringExt.lastCodePoint("hi")  编译期绑定
 
-filter { } 若 inline：
-    调用点展开成循环，没有额外 Function 对象
+虚方法：看对象类型
+扩展：看引用类型
+
+inline filter { } → 调用点展开成 for 循环
 ```
 
 ## 常见坑与追问
 
-1. **用扩展模拟重写。** 追问：父类型引用指向子对象时走哪个？走父类型上解析到的那个扩展。要多态就写成员。
-2. **Java 找不到扩展。** 追问：它在哪个类？文件级 Kt 类的静态方法。核心 API 不要只放扩展。
-3. **到处 inline。** 追问：坏处是什么？调用点字节码膨胀，调试困难。只给小函数和 reified。
-4. **非内联 Lambda 里写 return。** 追问：为什么编译失败？那会返回一个已经不在栈上的函数。用 `return@forEach`，或把函数改成 inline。
+1. **扩展模拟重写。** 追问：父引用子对象调扩展？父类型上解析的那个。要多态写成员。
+2. **Java 调扩展。** 追问：在哪？`FileKt.foo(receiver)`。核心 API 不要只放扩展。
+3. **大户 inline。** 追问：坏处？DEX 膨胀、断点诡异。小而频或 reified。
+4. **forEach 里 return。** 追问：何时合法？外层函数 inline + Lambda inline；否则 `return@forEach`。
+5. **扩展与作用域函数同名 import。** 追问：两个同名扩展？import 冲突/接收者类型分派，不是重载覆盖。

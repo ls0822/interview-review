@@ -4,7 +4,9 @@ type: knowledge
 module: compose
 title: Compose 副作用 API
 priority: P0
-version: 2
+version: 3
+order: 30
+requires: [kp-compose-recomposition, kp-coroutine-builders]
 ---
 
 ## 一句话

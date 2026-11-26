@@ -4,7 +4,9 @@ type: knowledge
 module: framework
 title: 依赖注入 Hilt / Koin
 priority: P0
-version: 2
+version: 3
+order: 20
+requires: [kp-componentization]
 ---
 
 ## 一句话

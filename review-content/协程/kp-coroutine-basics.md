@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程模型：线程、挂起与续体
 priority: P0
-version: 6
+version: 7
 order: 10
 ---
 
@@ -71,6 +71,19 @@ fun mainThreadLoad() {
 ```
 
 把 `delay` 换成 `Thread.sleep`，主线程在第一次 sleep 就停住，`2-A` 和界面都动不了。换成不挂起的 `heavyCompute()`，`2-A` 会等到计算结束才打印。
+
+```kotlin
+// 错：以为 launch 会自动让出
+scope.launch(Dispatchers.Default) {
+    while (true) { heavyCpu() } // 无挂起点，占满一个 worker
+}
+
+// 对
+while (isActive) {
+    heavyCpu()
+    yield() // 或 ensureActive() 只做取消检查、不让邻居
+}
+```
 
 ## 画面
 

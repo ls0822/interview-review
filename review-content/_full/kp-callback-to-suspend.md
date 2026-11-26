@@ -4,9 +4,9 @@ type: knowledge
 module: coroutine
 title: 回调转挂起与 suspendCancellableCoroutine
 priority: P0
-version: 2
+version: 3
 order: 60
-requires: [kp-coroutine-basics]
+requires: [kp-coroutine-basics, kp-coroutine-cancel]
 ---
 
 ## 一句话
@@ -40,6 +40,9 @@ requires: [kp-coroutine-basics]
 3. **和 async 别混。** `async` 是协程里再开一张工单。`suspendCancellableCoroutine` 是把**外部已有的回调 API** 接进当前协程，并不多开一张「业务工单」语义上的兄弟任务（实现上仍是挂起当前协程）。
 4. **CompletableDeferred。** 适合「先把 Deferred 交给别人，稍后在某个回调里 `complete`」。多个等待方都可以 `await` 同一个完成结果。注意不要 `complete` 两次。
 5. **多次事件。** 定位更新、下载进度不是「一次 resume」模型，用 `callbackFlow`：`trySend` / `awaitClose { 反注册 }`。
+6. **`resume` 的线程。** `resume` / `resumeWithException` 可以在任意线程调用；协程库会把恢复派发到Continuation 上下文里的 Dispatcher。回调若在 Socket 线程回来，通常没问题。若你要在 resume 之后立刻碰 View，仍应保证最终收集/更新发生在 Main（要么 API 文档要求回调在主线程，要么 resume 前 `withContext(Main)` 再改界面，更好是 resume 值、在 ViewModel 里用 StateFlow，界面在主线程 collect）。
+7. **只 resume 一次。** 成功和失败互斥。协程已取消时，`cont.isActive` 为 false，应 `cont.cancel()` 或直接不 resume，避免把结果交给已销毁的调用方。`tryResume` 在竞态下返回 false，表示已经有人 resume 过或已取消。
+8. **`suspendCoroutine` 的坑。** 协程取消后回调仍可能 `resume`，续体可能已无效。除非确定生命周期覆盖整个回调，否则一律用 Cancellable 版本。
 
 ## 使用与实践
 
@@ -82,6 +85,49 @@ suspend fun use() {
 }
 ```
 
+连续事件用 `callbackFlow`（对比一次性 suspend 包装）：
+
+```kotlin
+fun locationUpdates(): Flow<Location> = callbackFlow {
+    val cb = object : LocationCallback {
+        override fun onLocation(loc: Location) {
+            trySend(loc) // 缓冲满且无人收时可能失败，要处理返回值
+        }
+    }
+    manager.register(cb)
+    awaitClose { manager.unregister(cb) }
+}
+```
+
+错误对照（面试常写反）：
+
+```kotlin
+// 错：双路径都可能 resume
+suspend fun bad(id: String): User = suspendCancellableCoroutine { cont ->
+    api.getUser(id, object : Callback {
+        override fun onSuccess(u: User) {
+            if (u.cacheHit) cont.resume(u)
+            cont.resume(u) // cacheHit 时 resume 两次 → 非法
+        }
+        override fun onError(e: Throwable) = cont.resumeWithException(e)
+    })
+}
+
+// 错：取消后仍 resume
+override fun onSuccess(u: User) = cont.resume(u) // 应 if (cont.isActive) cont.resume(u)
+
+// 错：用 async 包外部回调（多开一张工单，异常和取消都难结构化）
+fun load(scope: CoroutineScope) = scope.async {
+    suspendCancellableCoroutine<User> { ... } // 能工作但语义应是 suspend fun，不是 async
+}.await()
+
+// 错：callbackFlow 却期望「调用一次拿一个返回值」
+suspend fun loginOnce(): Token = callbackFlow {
+    auth.login { trySend(it); close() }
+    awaitClose { }
+}.first() // 能用但过重；一次性用 suspendCancellableCoroutine
+```
+
 ## 画面
 
 ```text
@@ -103,3 +149,5 @@ cancel 协程 ──► invokeOnCancellation ──► call.cancel()
 2. **忘了 `invokeOnCancellation`。** 追问：页面关了请求还在不在？应该关掉。
 3. **用 `async` 包回调。** 追问：async 解决的是并行挂起任务，不是回调桥接；桥接用 `suspendCancellableCoroutine`。
 4. **把 `callbackFlow` 用在一次性登录回调。** 过重；一次性用 suspend 包装即可。
+5. **在 OkHttp 回调里直接改 View。** 追问：回调线程在哪？可能在非 Main。应 resume 数据，界面在 Main 收集；或文档约定回调线程。
+6. **`complete` 两次 `CompletableDeferred`。** 追问：第二次会怎样？`IllegalStateException`。用 `completeExceptionally` 与成功互斥。

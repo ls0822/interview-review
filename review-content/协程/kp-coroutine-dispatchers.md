@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: Dispatcher 与线程池选择
 priority: P0
-version: 4
+version: 5
 order: 20
 requires: [kp-coroutine-basics]
 ---
@@ -66,6 +66,18 @@ val named = Executors.newFixedThreadPool(4) { r ->
 ```
 
 `launch(Dispatchers.IO) { x = read() }; use(x)` 是错的：`use(x)` 不会等 IO 完成。要等就 `withContext` 或 `async`/`await`。
+
+```kotlin
+// 错：Default 上阻塞 JDBC
+withContext(Dispatchers.Default) {
+    stmt.executeQuery() // 占满 ~核数个 worker
+}
+
+// 错：IO 上大矩阵乘法
+withContext(Dispatchers.IO) { fft(huge) } // 饿死真 IO
+
+// 对：阻塞 → IO，CPU → Default
+```
 
 ## 画面
 

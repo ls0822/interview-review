@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程取消、异常与监督
 priority: P0
-version: 5
+version: 6
 order: 50
 requires: [kp-coroutine-builders]
 ---
@@ -93,6 +93,24 @@ supervisorScope {
 ```
 
 这里的 `runCatching` 若用在会取消的子协程里，仍要把 `CancellationException` 排除，否则父级取消时子协程把取消吃掉，表现为「取消不干净」。
+
+```kotlin
+// 错
+viewModelScope.launch {
+    runCatching { longWork() } // CancellationException 被收成 Result.failure
+}
+
+// 对
+viewModelScope.launch {
+    try {
+        longWork()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        _state.value = Err(e)
+    }
+}
+```
 
 ## 画面
 

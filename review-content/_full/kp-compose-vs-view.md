@@ -4,7 +4,9 @@ type: knowledge
 module: compose
 title: Compose 与 View 模型
 priority: P0
-version: 2
+version: 3
+order: 10
+requires: [kp-arch-patterns]
 ---
 
 ## 一句话

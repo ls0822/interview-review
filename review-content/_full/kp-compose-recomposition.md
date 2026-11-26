@@ -4,7 +4,9 @@ type: knowledge
 module: compose
 title: 重组与状态
 priority: P0
-version: 2
+version: 3
+order: 20
+requires: [kp-compose-vs-view, kp-coroutine-flow]
 ---
 
 ## 一句话

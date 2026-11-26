@@ -4,7 +4,9 @@ type: knowledge
 module: project
 title: 教育直播底座架构
 priority: P0
-version: 2
+version: 3
+order: 20
+requires: [kp-sdk-api, kp-compose-interop]
 ---
 
 ## 一句话

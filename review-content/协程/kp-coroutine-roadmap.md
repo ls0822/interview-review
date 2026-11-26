@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程掌握地图与复习顺序（专家）
 priority: P0
-version: 2
+version: 3
 order: 1
 ---
 

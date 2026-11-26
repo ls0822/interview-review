@@ -4,7 +4,9 @@ type: knowledge
 module: project
 title: IM SDK 连接与消息可靠性
 priority: P0
-version: 2
+version: 3
+order: 10
+requires: [kp-long-connection, kp-sdk-api]
 ---
 
 ## 一句话

@@ -4,86 +4,83 @@ type: knowledge
 module: jvm
 title: 运行时数据区与对象头（面试版）
 priority: P0
-version: 1
+version: 2
+order: 10
 ---
 
 ## 一句话
 
-对象在堆上，引用和局部变量在线程栈上，类元数据在元空间；每个对象头里有 Mark Word 和类型指针，锁状态和 GC 年龄就写在 Mark Word 里。
+堆放实例、栈放引用与帧、元空间放类结构；JMM 管跨线程可见，这张地图管对象物理落在哪——答 OOM 和答 volatile 不能混成一题。
 
 ## 组成与结构
 
-面试按五块地画，再补对象布局，不要把栈和堆的职责说反。
+P0 地图：五块区域 + 对象在堆上的三段式布局，关系是「线程私有栈指向共享堆，Klass 指针指回元空间里的类型元数据」。
 
-| 区域 | 线程关系 | 放什么 | 撑爆了 |
-|------|----------|--------|--------|
-| 程序计数器 | 私有 | 下一条字节码地址 | 几乎不会 OOM，唯一没有 OOM 的区域 |
-| Java 虚拟机栈 | 私有 | 栈帧 | `StackOverflowError`，线程太多则无法创建新线程 |
-| 本地方法栈 | 私有 | native 帧 | 与栈类似 |
-| 堆 | 共享 | 实例、数组 | `OutOfMemoryError: Java heap space` |
-| 元空间 Metaspace | 共享，本地内存 | 类的结构、方法、运行时常量池 | 动态生成类过多会涨；Java 8 起不再是堆里的永久代 |
+| 区域 | 线程 | 典型内容 | 爆了是什么 |
+|------|------|----------|------------|
+| 程序计数器 | 私有 | 下一条字节码 | 几乎没有 OOM |
+| Java 虚拟机栈 | 私有 | 栈帧：局部表、操作数栈、动态链接、返回地址 | `StackOverflowError`；线程过多则无法创建线程 |
+| 本地方法栈 | 私有 | JNI / native 帧 | 同栈 |
+| 堆 | 共享 | 对象、数组本体 | `Java heap space` |
+| 元空间 Metaspace | 共享（本地内存） | 类结构、方法、运行时常量池（非 String 池） | 动态代理 / 反复加载类时涨 |
 
-栈帧里有局部变量表、操作数栈、动态链接、返回地址。`int a = 1` 的 a 在局部变量表；`User u = new User()` 的 u 是栈上的引用，`User` 实例在堆。引用本身多半是 4 字节压缩指针（开启压缩普通对象指针时），不是对象本体。
-
-对象在堆上的布局（HotSpot，压缩指针打开时的面试模型）：
+HotSpot 堆对象（压缩指针开启时的口述模型）：
 
 ```text
-| Mark Word 8B | Klass 指针 4B | 实例字段... | 对齐到 8B |
-数组再在类型指针后加 4B 长度
+[ Mark Word 8B | Klass 4B | 实例字段... | 8B 对齐 ]
+数组：Klass 后多 4B length
 ```
 
-Mark Word 复用这一小段：无锁时可以存 hashCode、分代年龄、偏向锁信息；轻量级锁时变成指向栈上锁记录的指针；重量级锁时指向监视器；GC 时还要放下标记位。所以 `synchronized` 的升级能在对象头上看见，不必另找一块「锁表」才能开始讲。类型指针指向方法区里的类元数据，虚拟机靠它知道这是哪个类、方法表在哪。
+Mark Word 在同一块 64bit 里复用：hash、分代年龄、偏向锁 epoch、轻量锁指向栈上 Lock Record、重量锁指向 `ObjectMonitor`、GC 标记位。`synchronized` 的升级路径就写在这几个字上，不是另找全局锁表才算「锁在对象上」。
 
-Android 是 ART，对象头布局和 HotSpot 的位不完全相同。面试先按上面的 JVM 模型答完，补一句：线上以 heap dump、`adb shell dumpsys meminfo` 和 Profiler 为准，不要拿 Mark Word 偏移去硬解析 ART 对象。
+专家加分：TLAB（Thread-Local Allocation Buffer）让每个线程在 Eden 里先划一小条私有缓冲区，`new` 多数走 bump-the-pointer，减少分配时的同步；对象仍属于堆，只是分配路径优化。DirectByteBuffer 的堆外内存不占 Java 堆，但受 `-XX:MaxDirectMemorySize` 约束，泄漏时 heap dump 看不见那块地。
+
+Android：ART 对象头位域与 HotSpot 不完全一致；面试先讲完 JVM 模型，再补「线上看 hprof / Profiler / meminfo，别拿 Mark Word 偏移硬解析 ART」。
 
 ## 原理
 
-1. **为什么引用在栈、对象在堆。** 栈帧随方法返回就弹出，适合生命周期和调用严格嵌套的数据。对象要在方法返回后还活着，就必须放在调用方栈帧之外，于是放堆上，用 GC 回收没有引用的实例。把大数组放局部变量，占的是堆，栈上只有一个引用。
-2. **逃逸与分配。** 若分析发现对象不会逃出方法，JIT 可能做标量替换，把字段拆进栈，甚至不分配堆对象。面试知道有这件事即可，不要说成「new 出来的都在栈上」。
-3. **对象怎么被定位。** 栈上的引用指向堆地址（直接指针）或句柄。HotSpot 常用直接指针，改地址的是 GC 移动对象时一起改引用。类型指针让虚方法调用能找到方法表。
-4. **Mark Word 和锁。** 无竞争时 CAS 改对象头就能完成轻量级锁；膨胀后对象头指向重量级监视器，线程去 park。所以「锁在对象上」这句话的物理位置就是对象头，锁的是这个对象，不是一段代码。
-5. **年龄和分代。** Mark Word 里的年龄在新生代熬过一次 Minor GC 就加，到阈值（默认常见 15，实际会动态调整）晋升老年代。这把对象头和 GC 连起来，避免两题各讲各的。
-6. **字符串和常量池。** 字面量 `"Tom"` 在运行时常量池，堆上可以有对应的 `String` 实例。`new String("Tom")` 会再要一个堆对象。常量池从永久代挪到堆（字符串常量池）是 Java 7 之后的模型，元空间里留的是类的符号信息。讲 String 不可变时可以指回这里。
-
-栈溢出是帧太多（递归、方法太大局部变量过多）。堆 OOM 是对象太多或泄漏，GC 之后仍不够。两者的栈完全不同：前者顶上是一长串同一个方法，后者是 `GC overhead` 或 `Java heap space`，业务栈可能很浅。
+1. **引用在栈、对象在堆的设计动机。** 栈帧随调用返回弹出，生命周期与嵌套调用一致；要在 `return` 之后仍存活的数据必须逃出当前帧，于是实例进堆，靠可达性回收。大数组 `new byte[n]` 占的是堆体积，栈上只留一个引用槽。逃逸分析若证明对象不出方法，JIT 可标量替换甚至消掉堆分配——不能说成「new 一定在堆上」，但默认口述仍按堆分配讲。
+2. **定位方式：直接指针 vs 句柄。** HotSpot 默认直接指针，GC 移动对象时要更新所有引用。句柄多一层间接，换址成本低但读多写多场景更贵。类型指针（Klass）让 `invokevirtual` 能找到 vtable；数组还有 length 字段参与 `ArrayIndexOutOfBounds` 检查。
+3. **Mark Word 与锁语义。** 无竞争：CAS 改对象头完成轻量锁；膨胀后对象头存监视器指针，线程 park/unpark。偏向锁减少反复加同一把锁的 CAS；**撤销偏向**（批量重偏向、安全点扫描）会在某次加锁时突然变贵——面试可点到「偏向不是永久免费午餐」。hashCode 与锁互斥使用 Mark Word：无锁时可缓存在头里，一旦偏向/轻量锁占用，hash 可能迁到别处，所以「先 `hashCode` 再加锁」和反过来性能特征不同。
+4. **分代年龄写在对象头。** Minor GC 幸存一次年龄 +1，到阈值（默认常见 15，JIT 会动态调 `-XX:MaxTenuringThreshold`）晋升老年代。这把「内存地图」和「GC」连成一条叙事，避免两题各背各的。
+5. **元空间 vs 永久代 vs 字符串池。** Java 8 起类元数据进本地内存的 Metaspace，减轻与堆争抢；`String` 字面量池在堆上（intern 行为影响堆）。`static` 字段的引用变量在类的运行时表示里，**指向的对象仍在堆**——静态 ≠ 对象在方法区。
+6. **边界与易混。** JMM 不问对象在哪块地，问 hb 与可见性。栈溢出栈顶常是同一方法无限递归；堆 OOM 常伴 `GC overhead limit exceeded` 或 shallow 业务栈。`ThreadLocal` 的值挂在 `Thread` 对象上，池化线程不 `remove` 会把值留到下一轮并制造隐性泄漏。
 
 ## 使用与实践
 
-Android 内存口述按这个顺序：哪块地涨了，用什么看。Java 堆用 Profiler / hprof，看 Dominator 和到 GC Root 的路径（静态、单例、Activity 被监听器抓住）。线程数暴涨导致的是无法创建线程，不是 heap space。类加载过多（插件反复加载且卸载不掉）才会把元数据顶上去。
+Android 排查顺序：哪块地在涨 → 用什么工具。Java 堆：Profiler、hprof、Dominators、到 GC Root 的路径（静态 Context、未注销监听、单例）。`pthread`/`fd` 过多不是 heap space。反复热加载插件又卸不干净会顶元数据（HotSpot 语境）；ART 更常见是 Java 堆 + Bitmap native + 线程。
 
-不要在静态字段上放 Context、View、大 Bitmap。静态在类上，类在类加载器上，加载器活着对象就活着。
-
-`ThreadLocal` 存在线程对象上，线程若来自池，用完不 `remove`，下一次复用这条线程还会看见旧值，也把值留在堆上。这不是栈上的局部变量。
+不该做：在 `static` 上长期握 `Activity` / `View`；把「共享堆」说成「写入立刻全员可见」（那是 JMM）。大对象考虑复用与池化前先用 Allocation 证明是分配热点，不是先上池（池本身是强引用集合）。
 
 ## 例子
 
 ```java
 public class Demo {
-    static User cached;          // 引用在类的静态区，对象仍在堆
+    static User cached;          // 引用在类元数据侧，User 实例在堆
     void foo() {
-        int a = 1;               // 栈帧局部变量
-        User u = new User("Tom"); // u 在栈，User 在堆，头里有类型指针
-        cached = u;              // 方法返回后对象仍可达
+        int a = 1;               // 局部变量在栈帧
+        User u = new User("Tom"); // u 在栈，实例在堆，头含 Klass
+        cached = u;              // return 后仍可达
     }
 }
 ```
 
-递归版和泄漏版可以口头对比：`void f(){ f(); }` 是栈；`static final List<byte[]> leak` 里不断 `add(new byte[1_000_000])` 是堆。
+错例对照：`void f(){ f(); }` → 栈溢出，与泄漏无关。`static final List<byte[]> pin` 不断 `add(new byte[1<<20])` → 堆涨，GC 后仍满，因为静态可达。错把 `int a` 说成在堆上——基本类型作局部变量只在栈帧，作实例字段才在堆内对象体。
 
 ## 画面
 
 ```text
-线程栈帧 foo
+线程栈帧 foo()
   a = 1
-  u ──┐
-      v
-堆: [MarkWord|Klass|*name|]──> "Tom"
-类元数据在元空间，Klass 指向它
+  u ──────┐
+          v
+堆: |Mark|Klass|fields...|  ──Klass──> 元空间里的类元数据
 ```
 
 ## 常见坑与追问
 
-1. **把局部变量说成都在堆上。** 追问：基本类型 `int` 作为局部变量在哪？在栈帧。它作为对象字段才在堆里的对象体内。
-2. **永久代和元空间说成一回事。** 追问：为什么要换成元空间？类元数据放本地内存，避免和堆挤在一起，仍会因为类太多而涨。
-3. **对象头只记「有个锁」。** 追问：hashCode 存在哪？无锁时可以写进 Mark Word；一旦用了偏向或轻量锁，hash 会另存，所以第一次 `hashCode` 和加锁会互相影响实现，面试点到即可。
-4. **ART 和 HotSpot 的 OOM 名词混用。** 追问：Android 上更常见的内存问题是什么？泄漏导致 Java 堆或 Bitmap native 涨，以及线程和 fd 过多，不一定是 Metaspace 这句 HotSpot 日志。
+1. **永久代和元空间混为一谈。** 追问：换 Metaspace 解决什么？类元数据不再挤占堆内永久代，但仍会因类过多而涨；String 池仍在堆。
+2. **局部变量都在堆。** 追问：`int` 局部变量在哪？栈帧。只有引用类型的引用槽在栈，指向堆。
+3. **对象头只记「有个锁」。** 追问：无锁时 hash 存在哪？Mark Word；与偏向/轻量锁争抢同一字段。
+4. **ART OOM 日志照搬 HotSpot 名词。** 追问：Android 更常见？Java 堆泄漏、Bitmap/native、线程与 fd；别只背 `-Xmx`。
+5. **DirectByteBuffer 泄漏只盯 heap dump。** 追问：堆外谁管？Cleaner/虚引用收尾 + MaxDirectMemorySize；dump 里可能只有很小的 Java 包装对象。

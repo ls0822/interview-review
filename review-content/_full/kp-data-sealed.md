@@ -4,39 +4,44 @@ type: knowledge
 module: language
 title: data class、sealed、object 与 enum
 priority: P0
-version: 1
+version: 2
+order: 60
+requires: [kp-oop-basics, kp-equals-hashcode]
 ---
 
 ## 一句话
 
-`data class` 用来装一份会比较、会拷贝的数据；`sealed class` 用来表示有限几种形状不同的结果；`object` 是单例；`enum` 是结构相同的有限常量。
+`data class` 表达「会比、会拷的一份数据」；`sealed` 表达「就这几种形状的结果」；`object` 是单例入口；`enum` 是结构相同的有限命名常量——UI 状态机与网络结果选型错一个，代码要么共享可变要么穷尽检查失效。
 
 ## 组成与结构
 
-| 类型 | 编译器多给你的 | 不要拿它做的事 |
-|------|----------------|----------------|
-| `data class` | `equals`/`hashCode`/`toString`/`copy`/`componentN`，主构造里的属性才参与 | 可变全局缓存、需要继承体系 |
-| `sealed class` | 子类集合封闭，同模块内 `when` 可穷尽 | 无限开放的插件类型 |
-| `object` | 线程安全的懒加载单例，`INSTANCE` | 当成普通可复制的数据 |
-| `companion object` | 类名下的命名空间，不是自动的 Java static | 不加重注解就当静态方法给 Java |
-| `enum class` | 每个常量一个实例，可带统一字段 | 每个分支挂完全不同的数据结构 |
+```text
+  data class   值相等 + copy + componentN
+  sealed       封闭子类集，when 可穷尽
+  object       INSTANCE，类初始化触发
+  enum         固定常量实例，同构字段
+  companion    命名空间，非 Java static 除非 @JvmStatic
+```
 
-`data class` 的主构造参数必须是 `val` 或 `var`。类体里另写的属性不进 `equals`。它默认 `final`，不能当开放父类（有限的接口实现可以）。
+| 类型 | 编译器增量 | 别 misuse | 档位 |
+|------|------------|-----------|------|
+| `data class` | equals/hash/toString/copy | 可变全局、开放继承 | P0 |
+| `sealed class/interface` | 子类封闭 | 无限插件类型 | P0 |
+| `object` | 懒于类 init | 当可复制数据 | P0 |
+| `enum` | 每常量单例 | 异构分支数据 | P0 |
 
-`sealed` 的直接子类必须在同一模块，新版本 Kotlin 可以放在同一模块的其他文件。子类可以是 `object`、`data class` 或普通类。
+主构造参数须 `val`/`var` 才进 `equals`。`sealed` 直接子类须同模块（可散文件）。`data object` 让无载荷分支也有稳定 equals/toString。
 
 ## 原理
 
-1. **data 的相等。** 生成的 `equals` 按主构造属性逐个比较，`hashCode` 用同一批属性。两个 `User(1,"a")` 值相等但不是同一个引用。放进 `HashSet` 之后如果把 `var` 属性改了，桶会错位。所以作为状态和 Map key 的 data class 用 `val`。
-2. **copy 是浅拷贝。** `user.copy(name = "b")` 得到新的 `User`，嵌套的 list 若仍是同一个引用，改 list 内容两个对象都看见。要发布给 `StateFlow` 的嵌套集合，需要换新列表，而不是只 copy 外层。
-3. **sealed 穷尽。** `when` 不写 `else` 时，编译器按已知子类检查是否写全。以后加一种 `Error`，所有不写 `else` 的 when 都会编译失败，这是它相对「整数错误码 + else」的价值。运行时没有额外的「密封检查指令」，封闭性来自编译器禁止模块外继承。
-4. **和 enum 的分界。** 枚举常量在类加载时就各有一个实例，可以有字段，但每个常量的字段结构相同。`Success(list)` 需要无数个不同 list 的实例，枚举做不到。方向、模式、权限这种固定名字用枚举；界面状态、网络结果用 sealed。
-5. **object 的初始化。** `object` 编译成带 `INSTANCE` 的类，初始化锁在类初始化上，第一次主动使用才跑 `init`，由 JVM 保证只跑一次。它不是懒到「第一次调用某方法」，而是第一次触发该类初始化的任何主动使用。`companion object` 也是这样一个实例，挂在外部类的 `Companion` 字段上。
-6. **密封接口。** `sealed interface` 适合一个类型同时属于多种能力，仍然保持穷尽。UI 事件用 sealed interface，状态用 sealed class 持有数据，都可以。不要为了穷尽把几十种子类塞进一个密封层次，那会变成上帝类型。
+1. **data 相等与哈希容器。** 按主构造属性生成 equals/hash。`var` 改字段后 `HashSet` 找不到——状态/key 用 `val`。
+2. **copy 浅拷贝。** 嵌套集合同一引用，改内层两边见。发 `StateFlow` 要换新 list，不只 `copy` 外层。
+3. **sealed 穷尽。** 无 `else` 的 `when`，加子类则全库编译失败——相对魔法 int 错误码的优势。封闭性来自编译器禁止模块外继承，无运行时「密封指令」。
+4. **vs enum。** 枚举常量类加载各一份、字段形状同构；`Success(data)` 要无数 payload 实例，用 sealed。方向/日志级别用 enum。
+5. **object 初始化时机。** 第一次主动使用该类（任一 static 入口），JVM 保证一次。不是「进主函数就全初始化」。
+6. **sealed interface。** 多能力 + 穷尽；别把几十种子类塞一层成上帝类型。事件用 sealed interface，承载数据用 sealed class 常见。
 
 ## 使用与实践
-
-界面状态：
 
 ```kotlin
 sealed interface UiState {
@@ -46,46 +51,65 @@ sealed interface UiState {
 }
 ```
 
-`data object` 让没有数据的分支也有稳定的 `equals`/`toString`，比普通 `object` 在日志里更好认。一次性事件不要塞进这个状态再靠「相同值不刷新」去重，否则旋转后 StateFlow 会把旧错误再交给新界面。事件用单独通道，或在状态里放 `pending` 并在消费后清掉。
+一次性 Snackbar/导航事件不要塞进会被 `distinctUntilChanged` 吞掉的状态流；用 Channel 或 `pending` 消费后清空。
 
-枚举适合网络协议里稳定的模式字符串，配 `@SerializedName`。不要用枚举装「成功带列表、失败带错误码」这种异构数据。
+协议稳定码用 enum + `@SerializedName`。不要 enum 装「成功带列表、失败带码」异构体。
 
 ## 例子
 
+**正确**
+
 ```kotlin
-enum class Direction { NORTH, SOUTH, EAST, WEST }
-
-enum class Color(val rgb: Int) { RED(0xFF0000), GREEN(0x00FF00) }
-
 sealed class Result {
     data class Ok(val body: String) : Result()
     data class Err(val code: Int, val msg: String) : Result()
 }
-
-fun render(r: Result): String = when (r) {
+fun render(r: Result) = when (r) {
     is Result.Ok -> r.body
     is Result.Err -> "${r.code}:${r.msg}"
 }
+```
 
-object Clock {
-    fun now(): Long = System.currentTimeMillis()
+**错误对照：enum 挂可变共享列表**
+
+```kotlin
+enum class UiState {
+    OK;
+    val items = mutableListOf<Item>() // 所有 OK 共享同一 list
 }
 ```
 
-`Ok("a") == Ok("a")` 为 true。`Color.RED.rgb` 每个常量都有同一形状的字段。`Clock` 没有构造，全进程一个实例。
+**错误对照：`when` 加 `else` 吃掉新分支**
+
+```kotlin
+fun handle(s: UiState) = when (s) {
+    UiState.Loading -> Unit
+    else -> Unit // 加 Err 子类也不报错
+}
+```
+
+**错误对照：data + `var` 当 Map key**
+
+```kotlin
+data class Key(var id: Int)
+val set = hashSetOf(Key(1))
+set.first().id = 2
+set.contains(Key(1)) // false
+```
 
 ## 画面
 
 ```text
-enum：固定几个实例，字段形状一样
-sealed：有限个子类，每个子类字段可以完全不同
-data class：值相等 + copy
-object：INSTANCE，类初始化时创建
+enum：少数单例，字段同形
+sealed：少数子类，字段可各异
+data：值语义 + copy
+object：INSTANCE，首次 touch 初始化
 ```
 
 ## 常见坑与追问
 
-1. **data class 用 var，放进 HashSet 再修改。** 追问：为什么找不到了？hashCode 变了，不在原来的桶。
-2. **when 写了 else，加密封子类也不报错。** 追问：穷尽检查靠什么？靠不写 else。else 会把新分支吞掉。
-3. **用枚举表示 UI 状态，成功时还要另挂一个可变列表。** 追问：为什么别扭？枚举实例是单例，列表会在所有使用方之间共享。改成 sealed。
-4. **把 object 当成进程启动就初始化。** 追问：什么时候跑 init？第一次主动使用该类时。没人访问就不会跑。
+1. **data `var` + HashSet。** 追问：改了啥找不到？hashCode 变，桶错。
+2. **sealed 却写 `else`。** 追问：穷尽靠什么？去掉 else 让编译器查全分支。
+3. **enum 表示复杂 UI 状态。** 追问：为何别扭？单例+共享可变。改 sealed。
+4. **以为 object 进程启动就 init。** 追问：何时跑？首次主动引用该类。
+5. **`copy` 以为深拷贝。** 追问：嵌套 list 呢？同一引用，发状态要换内层集合。

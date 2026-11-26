@@ -4,7 +4,9 @@ type: knowledge
 module: framework
 title: 客户端主流三方分层（网络/图片/DI/路由等）
 priority: P0
-version: 2
+version: 3
+order: 10
+requires: [kp-arch-patterns, kp-di]
 ---
 
 ## 一句话

@@ -4,85 +4,118 @@ type: knowledge
 module: language
 title: val、var、lateinit、lazy 与 inline
 priority: P0
-version: 1
+version: 2
+order: 20
+requires: [kp-oop-basics]
 ---
 
 ## 一句话
 
-`val` 是引用只能赋一次，不是对象内部不可变；`lateinit` 把非空检查推迟到第一次使用；`lazy` 在第一次读取时初始化并可同步；`inline` 则是另一件事，用来把函数体贴进调用点。
+`val` 锁的是引用不能二次赋值，不是对象里不能再改；`lateinit` 把「必须非空」的证明推迟到第一次读；`lazy` 把昂贵初始化推迟到第一次读并默认同步；`inline` 是函数调用优化，和前三者不是同一层机制。
 
 ## 组成与结构
 
-| 写法 | 赋值时机 | 空与类型 | 线程 |
-|------|----------|----------|------|
-| `val` | 声明时或 init 里一次 | 可以是可空类型 | 看普通字段 |
-| `var` | 随时改 | 同上 | 改引用不是原子发布，共享时要同步 |
-| `lateinit var` | 用之前的某个时刻 | 只能非空引用类型，不能 Int | 赋值本身不管并发 |
-| `by lazy` | 第一次 `get` | 类型按表达式 | 默认 `LazyThreadSafetyMode.SYNCHRONIZED` |
-| `const val` | 编译期常量 | 只能基本类型和 String | 内联到调用方 |
+```text
+  val/var ──属性/局部──> 引用可变性
+  lateinit ──非空引用类型──> 用时才检查是否写过
+  by lazy ──委托──> 第一次 get 算一次、记下来
+  const val ──编译期常量──> 注解参数、内联到调用方
+  inline ──函数──> 调用点展开，支撑 reified / 非局部 return
+```
 
-`lazy` 的模式还有 `PUBLICATION`（允许多个线程同时算，取其中一个）和 `NONE`（调用方保证单线程，最快）。默认模式用双重检查加锁，初始化只成功一次。
+| 写法 | 赋值时机 | 空与类型 | 并发默认 |
+|------|----------|----------|----------|
+| `val` | 一次 | 可 `T?` | 普通字段语义 |
+| `var` | 随时 | 同上 | 共享需 `@Volatile`/锁 |
+| `lateinit var` | 用前某刻 | 仅非空引用类型 | 不帮你同步 |
+| `by lazy` | 首次 `get` | 按表达式 | `SYNCHRONIZED` |
+| `const val` | 编译期 | 基本类型+String | 无运行时 |
 
-`inline` 和这组属性关键字经常被放在同一题里问，因为它也是「少一次间接」：不生成 Lambda 对象，并允许 `reified` 和非局部 return。它不改变 val 的赋值规则。
+`LazyThreadSafetyMode`：`SYNCHRONIZED`（默认）、`PUBLICATION`（允许多线程算一次取结果）、`NONE`（调用方保证单线程）。
 
 ## 原理
 
-1. **val 的字节码。** 主构造 `class User(val id: Int)` 生成私有字段、getter，没有 setter。局部 `val` 是编译器禁止再赋值。若类型是 `MutableList`，`val list` 仍可以 `add`，变的是对象内容，不是引用。真正的不可变要靠不可变数据结构或只暴露只读接口加拷贝。
-2. **var 与可见性。** 多线程读 `var` 引用，没有 `@Volatile` 或锁时，别的线程可能一直看见旧引用。`val` 指向不可变对象、并且安全发布之后，读者看到的引用不会换成另一份。这是更喜欢 `val` 状态的并发理由。
-3. **lateinit 的检查。** 编译器在每次访问前插入「是否已初始化」的字段标志检查。没赋值就抛 `UninitializedPropertyAccessException`。它不能用于 `Int`、`Boolean`，因为这些类型没有一个额外的「未设置」比特，实现上靠引用 null 当哨兵，而基本类型字段会先是 0/false，和业务值分不开。可空 `var name: String? = null` 能表达「还没有」，但类型会变成可空，后续都要处理 null。
-4. **lazy 的一次初始化。** 默认实现：先无锁读已完成的值，没有则进入同步块，再检查一次，然后执行 Lambda，把结果存下来。Lambda 里的异常不会把「失败」缓存成永久结果的说法不要说死在所有版本上；面试按「初始化应该是纯的、失败就让调用方看见并允许重试」来设计，不要在 lazy 里做可能失败的网络。
-5. **和 by viewModels 一类委托的差别。** `by` 是属性委托，`getValue`/`setValue` 接管读写。`lazy` 是标准库委托。`lateinit` 不是委托，是语言对属性的特殊标记。委托可以懒、可以打日志、可以映射到 Map，但每次访问多一次调用，内联后常常能消掉。
-6. **inline 的边界。** 内联函数体不要太大。公开 inline 函数不能访问 private 成员的限制在新版本有所放宽（访问会变成 public 的合成方式），但仍不要靠 inline 去打破封装。`reified` 只存在于 inline 函数。属性的 getter 也可以 inline，那是访问器优化，和 lazy 不冲突。
+1. **val 的语义分层。** 主构造 `val` 生成 private field + getter，无 setter。局部 `val` 是编译器禁止再赋值。容器类型 `val list = mutableListOf()` 仍可 `add`——不变的是「这根引用」，不是「堆里那份内容」。不可变状态 = `val` + 不可变数据结构或每次 `copy` 出新快照（配合 `StateFlow`）。
+2. **var 与内存可见性。** 多线程读 `var` 无 `@Volatile` 可能长期见旧引用。`val` 指向不变、且对象本身不可变并安全发布后，读者不会突然换引用——这是 Compose/Reducer 偏好 `val` 的原因之一。
+3. **lateinit 的实现直觉。** 访问前插入「是否已赋值」检查；未赋值抛 `UninitializedPropertyAccessException`，不是 NPE。不能用于 `Int` 等值类型：字段初值 0 与「未设置」无法区分，实现靠引用 null 作哨兵。`by lazy` 或 `Int?` 可替代。
+4. **lazy 的一次性。** 双重检查加锁：先无锁读缓存，未命中再进锁算一次。不要在 `lazy` 里做可能失败且需重试的网络/IO——失败路径与是否缓存「半初始化」因版本细节而异，设计上应把 lazy 块当纯、可重复、无副作用。
+5. **属性委托 vs lateinit。** `by lazy`/`by viewModels` 走 `getValue`；`lateinit` 是语言级标记，无额外委托对象。委托每次 get 多一层调用，inline 后常能消掉。
+6. **inline 为何常和本专题同考。** 内联消 Lambda 分配，允许 `reified` 与非局部 `return`；不改变 val 赋值规则。大函数 inline 会膨胀字节码；公开 API 慎用在整个类体。
 
 ## 使用与实践
 
-依赖注入、`onCreate` 里才有 Context 的字段，用 `lateinit`，并在用之前保证生命周期已经走到。能在声明时构造的用 `val`。
+DI、`onCreate` 才有 `Context` 的字段用 `lateinit`，并在生命周期边界前保证已写。能构造时写死的用 `val`。
 
-真正贵的对象（数据库、大配置解析）用 `lazy`，确认默认线程安全够不够。若初始化必须发生在主线程，不要从多个线程第一次碰它，改成主线程显式初始化。
+数据库、重配置解析用 `lazy`；若必须主线程初始化，不要让后台线程第一次触碰——改为主线程显式 warm-up。
 
-`lazy` 不要捕获 Activity。委托存在长生命周期对象上时，Lambda 抓住的界面也会留下来。
+`lazy` 不要闭包抓住 `Activity`/`Fragment` view——委托挂在长生命周期对象上会把界面泄漏。
 
-状态字段优先 `val` 加新对象，而不是 `var` 改旧对象。和 `StateFlow`、`data class copy` 是一套。
+UI 状态：`val state` + `data class.copy`，少用 `var` 就地改字段逃避相等性判断。
 
-热路径上的小高阶函数才 `inline`。业务页面函数标 inline 没有意义。
+热路径小高阶才 `inline`；页面级函数标 inline 无收益。
 
 ## 例子
+
+**正确：lateinit + lazy 分工**
 
 ```kotlin
 class RoomScreen {
     lateinit var title: String
-    val adapter = mutableListOf<String>() // 引用不变，内容可变
-    val db by lazy { openDatabase() }      // 第一次读才打开，默认加锁
+    val lines = mutableListOf<String>() // val 引用，内容可变
+    val db by lazy { openDb() }
 
-    fun start() {
+    fun onCreate() {
         title = "直播"
-        adapter += "msg"
-        db.query()
+        lines += "msg"
+        db.query() // 首次触发 lazy
     }
 }
-
-inline fun <reified T> typeName(): String = T::class.java.simpleName
 ```
+
+**错误对照：lateinit 未赋值就读**
 
 ```kotlin
-val n: Int by lazy(LazyThreadSafetyMode.NONE) { compute() } // 仅单线程访问时
+class Bad {
+    lateinit var router: Router
+    fun start() {
+        router.navigate("/") // UninitializedPropertyAccessException
+    }
+}
 ```
 
-`const val MAX = 3` 可以放在注解参数里；普通 `val MAX = 3` 不行，因为它不是编译期常量。
+**错误对照：lazy 里注册监听却不管生命周期**
+
+```kotlin
+class Holder {
+    val repo by lazy {
+        GlobalBus.register { /* 抓住 Activity */ }
+        Repo()
+    }
+}
+// 第一次碰 repo 时机不确定；Bus 可能永远不反注册
+```
+
+**错误对照：把 inline 当成变量内联**
+
+```kotlin
+// reified 只能出现在 inline 函数；普通属性不能 reified
+inline fun <reified T> parse(): T = /* T::class */
+```
 
 ## 画面
 
 ```text
-val   引用一次写死 ---- 对象内容仍可能变
-var   引用可换
-lateinit  非空，用时才检查有没有写过
-lazy      第一次 get：加锁 -> 计算 -> 记住
-inline    调用点展开，和属性懒加载不是同一层
+val   引用写一次 ──> 堆对象仍可能变
+var   引用可换 ──> 多线程要可见性
+lateinit  用时检查「写过没」
+lazy      第一次 get：锁 → 计算 → 缓存
+inline    贴进调用点（另一层：调用优化）
 ```
 
 ## 常见坑与追问
 
-1. **说 val 就是不可变。** 追问：`val list = mutableListOf()` 能不能 add？能。不可变是没有写入口或拷贝。
-2. **lateinit 用在 Int 上。** 追问：为什么不行？实现靠 null 哨兵，基本类型没有。改用可空或委托。
-3. **lazy 里启动协程或注册监听。** 追问：会初始化几次？成功路径一次，但时机不确定，还可能抓住外部生命周期。改为显式 start。
-4. **把 inline 理解成「这个变量内联」。** 追问：reified 为什么非要 inline？类型信息只在被贴进调用点时还在，和 val 的单次赋值无关。
+1. **「val = 不可变对象」。** 追问：`val` 的 `MutableList` 能 add 吗？能。真正不变是类型没有写入口或拷贝后交出。
+2. **lateinit 用于 `Int`。** 追问：为何编译失败？无 null 哨兵区分未赋值与 0。
+3. **lazy 里 `launch` / 副作用。** 追问：初始化几次？成功路径一次，但时机不确定且可能持有关键引用。改显式 `start()`。
+4. **`LazyThreadSafetyMode.NONE` 在多线程。** 追问：会怎样？可能算多次、竞态写缓存。单线程外不要用 NONE。
+5. **inline 与 reified。** 追问：为何必须 inline？类型参数擦除后，只有贴进调用点才知道具体 `T`。

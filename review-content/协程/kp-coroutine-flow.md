@@ -4,9 +4,9 @@ type: knowledge
 module: coroutine
 title: Flow 冷热流、StateFlow 与 replay
 priority: P0
-version: 2
+version: 3
 order: 80
-requires: [kp-coroutine-builders]
+requires: [kp-coroutine-builders, kp-coroutine-channel-mutex]
 ---
 
 ## 一句话
@@ -90,6 +90,28 @@ query
 
 StateFlow 去重依赖 equals。`data class Ok(val items: List<Item>)` 可以；在同一个 `MutableList` 里 `add` 再把同一个 state 对象塞回去，equals 可能仍为 true 或引用根本没变，界面不刷新。
 
+错误对照：
+
+```kotlin
+// 错：Toast 放进 StateFlow
+data class UiState(val page: Int, val toast: String?)
+_state.value = _state.value.copy(toast = "保存失败")
+// 旋转后 collectAsState 立刻读到 toast → 再弹一次
+
+// 错：以为 shareIn 后仍是冷流语义（上游只跑一份，但每个收集者仍要各自 collect 热流）
+val hot = cold.shareIn(scope, SharingStarted.Eagerly, replay = 0)
+hot.collect { } // 订阅热流；不会再为第二个 collect 重跑 cold 的上游块两次——上游已共享
+// 但：若没 shareIn，两次 collect cold 会打两次网（这才是冷）
+
+// 错：在 flow { } 里 launch { emit(1) }
+flow {
+    launch { emit(42) } // 违反 Flow 上下文不变量，运行时可能报错
+}.collect { }
+
+// 对：可变列表要换不可变快照再赋给 StateFlow
+_state.update { Ok(it.items + newItem) } // data class 新列表，equals 变
+```
+
 ## 画面
 
 ```text
@@ -111,3 +133,5 @@ StateFlow：永远有一个当前值，相同值不重复发
 2. **Toast 放进 StateFlow，旋转又弹。** 追问：为什么？新收集者立刻收到当前值。改成一次性通道或消费后清空。
 3. **flowOn 放在 collect 后面指望切收集线程。** 追问：它管哪一段？只管它上面的上游。收集线程由收集所在的协程决定。
 4. **tryEmit 事件总是丢。** 追问：replay 和 extra 都是 0 且没人挂起接收时会怎样？tryEmit 失败。给 extraBufferCapacity，或在协程里 emit。
+5. **`stateIn` 上游异常未 catch。** 追问：StateFlow 还更新吗？共享协程结束，最后值卡住。catch 必须在 stateIn 之前。
+6. **`flatMapLatest` 里阻塞读。** 追问：新关键字来了旧请求会停吗？没有协作点就不会。用可取消挂起 IO。

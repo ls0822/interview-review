@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: launch、async、withContext 与 Scope
 priority: P0
-version: 3
+version: 4
 order: 40
 requires: [kp-coroutine-basics, kp-coroutine-dispatchers]
 ---
@@ -88,6 +88,22 @@ class Session {
 ```
 
 `lifecycleScope.launchWhenStarted { }` 一类 API 在停止时只是挂起收集，旋转销毁仍会取消。和页面同生死的收集用 `repeatOnLifecycle`，避免在 STOPPED 之后还在跑，也避免只用 launch 却在后台继续收集。
+
+```kotlin
+// 错：launch 后下一行用结果
+val job = scope.launch(Dispatchers.IO) { api.load() }
+render(job.getCompleted()) // launch 无返回值，且不等待
+
+// 错：coroutineScope 里一个 async 失败，以为另一个还能手动取 half 结果
+coroutineScope {
+    val a = async { riskyA() }
+    val b = async { riskyB() } // a 失败 → b 被取消，拿不到 b
+}
+
+// 对
+val page = withContext(Dispatchers.IO) { api.load() }
+render(page)
+```
 
 ## 画面
 
