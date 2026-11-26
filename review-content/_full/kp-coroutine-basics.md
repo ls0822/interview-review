@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程模型：线程、挂起与续体
 priority: P0
-version: 1
+version: 2
 ---
 
 ## 一句话
@@ -85,3 +85,4 @@ fun mainThreadLoad() {
 2. **认为恢复还在 IO 的同一条线程。** 追问：什么才保证同一条？只有 Main 这种单线程 Dispatcher。认 Dispatcher，不认线程号。
 3. **同线程两个协程会抢占交叉。** 追问：死循环怎么办？没有挂起点就不会让出。加 `yield` 或 `ensureActive`。
 4. **主线程里用了阻塞 API 还觉得协程能救 ANR。** 追问：谁在占主线程？那个阻塞调用本身。要换成挂起函数或丢到 IO。
+5. **以为 `launch`/`async` 里调用的方法都是挂起函数。** 不对。块本身是挂起上下文（`suspend` lambda），所以**可以调用**挂起函数；但你写的普通 `fun foo()` 不会自动变成 `suspend fun`。只有声明了 `suspend` 的才是挂起函数。块里直接写的普通代码、普通方法，仍是同步跑完；没有挂起点就不会让出线程。

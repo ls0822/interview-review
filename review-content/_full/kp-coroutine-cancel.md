@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程取消、异常与监督
 priority: P0
-version: 1
+version: 2
 ---
 
 ## 一句话
@@ -108,6 +108,28 @@ finally / use 关闭资源
 
 若 catch (Exception) 吃掉：状态不再是取消，后面的代码继续
 ```
+
+## 专家补充：异常传播路径
+
+异常往哪走，只看三件事：这次算不算取消、父 Job 接不接手、有没有人在挂起点上把异常接住。`launch` 和 `async` 不是两种异常类型，是两种交付方式。
+
+`launch` 没有返回值可以接异常。孩子抛出的如果不是 `CancellationException`，普通父 Job 会立刻失败，并取消其他孩子。异常沿父链上传。只有传到根、而且一路都没有 `try/catch` 接住，才变成未捕获，根上下文里的 `CoroutineExceptionHandler` 才会被调用。调用时这条协程已经以该异常结束，handler 里不能把现场恢复回来，只能记日志或上报。
+
+`async` 把异常放进 `Deferred`。`await` 的那一行才抛给调用方，所以 `try/catch` 要包住 `await`，包住 `async { }` 本身没用，那一行立刻就返回了。官方语义是：async 已经用 Deferred 表示异常，它自己的 `CoroutineExceptionHandler` 不生效。不 `await` 也不会改道进 CEH，异常就留在 Deferred 里。但是父如果是普通 Job，这个孩子一失败就会取消父和兄弟，不必等到有人 `await`。要并行、要自己处理失败、还不要拆掉兄弟，就把这些 `async` 放进 `supervisorScope`，并且真的 `await` 或在块内 catch。
+
+`coroutineScope` 是普通 Job，又是一个挂起函数。里面任一孩子抛出非取消异常，作用域失败，其他孩子被取消，然后异常从 `coroutineScope` 这一行重新抛给调用方。调用方 catch 住，就不算未捕获，CEH 不响。这是结构化并发里优先用的失败出口：把异常交回调用者，而不是交给一个看不见的全局 handler。
+
+`supervisorScope` 只保证向下取消。作用域自己失败或被取消，孩子会停；某个孩子失败，不取消作用域，也不取消兄弟。作用域仍然会等所有孩子结束再返回。因为失败没有交给父，直接用 `launch` 抛出去的异常变成未捕获，走这个子协程上下文里的 CEH。没装 handler，就落到平台默认处理：JVM 上常见是打印，Android 上调试包经常直接崩溃。`supervisorScope` 不会替你把异常变成返回值。每个 `launch` 要自己 catch，或者显式带上 handler。里面的 `async` 同样不取消兄弟，异常仍要靠 `await` 来取。
+
+这和 `launch(SupervisorJob())` 不是一回事。`supervisorScope` 自己还是外层协程的孩子，外层取消进得来。把 `SupervisorJob()` 当成 `launch` 的参数，是换掉父亲，外层 Scope 取消不到这张工单。
+
+Android 的 `viewModelScope` 和 `lifecycleScope` 用的是 `SupervisorJob` 加上 `Dispatchers.Main.immediate`。所以一个 `viewModelScope.launch` 失败，不会拆掉同 Scope 里的其他协程，也不会自动写成界面上的错误态。块里没人 catch、Scope 上也没装 CEH 时，它按未捕获异常处理。页面上两块数据互不影响，靠的就是这层监督；业务失败仍要在协程体里收成 `Result` 或错误状态。CEH 装在这个直接子 `launch` 上会生效，因为父拒绝接手。再套一层 `coroutineScope` 之后，内层 `launch` 的异常先交给这层普通父，从 `coroutineScope` 抛出来；内层那个 CEH 不会响。外层 `launch` 若再不接，才轮到它自己的未捕获处理。
+
+CEH 要同时满足才触发。异常不是 `CancellationException`，取消是正常结束，handler 故意忽略。没有更具体的接手者：没有在协程体里 catch，也没有通过 `coroutineScope`、`withContext` 或 `await` 交给调用方。父链上没有普通 Job 接手，也就是这是根，或者父是监督者。装在「还会把异常交给父」的子协程上的 CEH 是死的。`runBlocking` 会把子异常重新抛到被堵住的那条线程上，而不是进你打算用来弹 Toast 的 handler。
+
+多个孩子先后失败时，第一个非取消异常是主异常，后面的挂在 `suppressed` 上。取消异常在这套聚合里是透明的：你在 `join` 上把 `CancellationException` 原样抛出，handler 拿到的仍是最初那个业务异常。
+
+`withTimeout` 抛出的 `TimeoutCancellationException` 是 `CancellationException` 的子类。它从 `withTimeout` 那一行抛给调用方，这一层可以单独 catch，转成超时错误。若在 `launch` 里完全不 catch，让它漏出去，框架把它当成取消而不是未捕获的业务失败，CEH 通常不会当错误上报。超时要在使用的那一层收掉。用户离开页面产生的普通取消，不要和超时合成同一种「加载失败」。
 
 ## 常见坑与追问
 

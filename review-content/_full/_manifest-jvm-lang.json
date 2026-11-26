@@ -1,7 +1,7 @@
 {
   "version": 1,
   "depth": "full",
-  "count": 33,
+  "count": 38,
   "ids": [
     "kp-thread-basics",
     "kp-synchronized-lock",
@@ -33,9 +33,14 @@
     "kp-coroutine-cancel",
     "kp-coroutine-flow",
     "kp-coroutine-channel-mutex",
+    "kp-coroutine-roadmap",
+    "kp-coroutine-context",
+    "kp-coroutine-internals",
+    "kp-flow-backpressure-android",
     "kp-agent-what",
     "kp-agent-rules-skills",
-    "kp-agent-workflow"
+    "kp-agent-workflow",
+    "kp-callback-to-suspend"
   ],
   "items": [
     {

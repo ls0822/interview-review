@@ -31,7 +31,7 @@ export function renderMarkdown(md, glossaryMap) {
 }
 
 /** 按 ## 切成卡片，便于阅读；「画面」显示为「结构示意」 */
-export function renderKnowledgeSections(md, glossaryMap) {
+export function renderKnowledgeSections(md, glossaryMap, sectionMastery = {}) {
   const text = String(md || '').trim()
   if (!text) return '<p class="muted">暂无正文</p>'
   const parts = text.split(/\n(?=##\s+)/)
@@ -46,14 +46,26 @@ export function renderKnowledgeSections(md, glossaryMap) {
     const body = (m[2] || '').trim()
     const meta = SECTION_LABELS[rawTitle] || { label: rawTitle, hint: '' }
     const sectionKey = escapeHtml(rawTitle)
+    const mastery = sectionMastery[rawTitle] || ''
+    const knownOn = mastery === 'known' ? 'on' : ''
+    const unclearOn = mastery === 'unclear' ? 'on' : ''
+    const badge =
+      mastery === 'known'
+        ? '<span class="tag good">已明白</span>'
+        : mastery === 'unclear'
+          ? '<span class="tag bad">待搞懂</span>'
+          : ''
     blocks.push(`
-      <section class="kp-section" data-section="${sectionKey}">
+      <section class="kp-section ${mastery === 'known' ? 'is-known' : mastery === 'unclear' ? 'is-unclear' : ''}" data-section="${sectionKey}">
         <header class="kp-section-head">
           <div>
-            <h2>${escapeHtml(meta.label)}</h2>
+            <h2>${escapeHtml(meta.label)} ${badge}</h2>
             ${meta.hint ? `<p class="kp-section-hint">${escapeHtml(meta.hint)}</p>` : ''}
           </div>
-          <button type="button" class="ghost" data-action="feedback-section" data-section="${sectionKey}">这节不懂</button>
+          <div class="row section-actions">
+            <button type="button" class="ghost ${knownOn}" data-action="section-known" data-section="${sectionKey}">这节明白</button>
+            <button type="button" class="ghost ${unclearOn}" data-action="feedback-section" data-section="${sectionKey}">这节不懂</button>
+          </div>
         </header>
         <div class="markdown">${renderMarkdown(body, glossaryMap)}</div>
       </section>`)

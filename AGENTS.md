@@ -2,6 +2,32 @@
 
 本仓库是面试复习工具。题库源文件只在 `review-content/`。
 
+## 用户标注（最高优先）
+
+用户点「这节明白 / 不懂」是为了让你看见并改讲解，不是只存在浏览器。
+
+### 拉取
+
+1. 读 `agent-inbox/source.json`（固定配置）。
+2. 执行 `npm run pull-inbox`，或按 source 里的 URL 拉：
+   - `latest.json`（看 `syncId` / `status`）
+   - `latest.md`
+   - `processed.json`
+3. 若本地已有较新文件且用户说「刚同步在本机」，可直接读仓库内 `agent-inbox/latest.*`。
+
+### 是否已处理
+
+- 每个上传批次有唯一 `syncId`，初始 `status: pending`。
+- 若 `processed.json` 的 `processed[].syncId` **已包含**该 id → **跳过**，不要重复改。
+- 处理完：把 `{ syncId, processedAt, note }` 写入 `processed.json` 并提交；或让用户在 App「同步设置 → 标记最近批次已处理」。
+
+### 怎么改
+
+1. 优先处理「不懂」；「明白」勿重复灌水。
+2. 改 `review-content/_full/<id>.md`（白话 + 最小例子），再  
+   `node scripts/apply-full-knowledge.mjs && npm run content`
+3. 相关 frontmatter `version` +1；回报 `syncId` 与改动的 id。
+
 ## 改内容时
 
 1. 只改 `review-content/` 下的 Markdown / YAML。不要手改 `public/content-pack.json`（由 `npm run content` 生成）。
@@ -11,18 +37,11 @@
 5. 新知识点必须含：一句话、组成与结构、原理、使用与实践、**例子**、**画面**、常见坑与追问。标题用主题名，**不要**写成问句（问句只给 `type: qa`）。
 6. 完整深度稿源在 `review-content/_full/`。改深度内容优先改 `_full/`，再执行 `node scripts/apply-full-knowledge.mjs && npm run content`。`_full` 不会打进 content-pack。
 7. 出现新的英文面试术语时，补进 `review-content/glossary.yaml`（含 `phonetic` IPA 与 `speak` 朗读文本）。
-8. 进度数据在浏览器本地，不要写入题库文件。
+8. 个人标注只进 `agent-inbox/`，不要写进题库正文。
 
-## 用户「不懂」反馈怎么批量改
+## 用户粘贴反馈时
 
-用户在 App 里点「这节不懂 / 整篇不懂」会攒到本地反馈箱，再「复制给 Agent」粘贴到对话。
-
-收到这类粘贴后：
-
-1. 按反馈里的 `id` 改 `review-content/_full/<id>.md`（白话重写不懂段 + 最小例子；有误则修正；要加深则扩原理）。
-2. 需要新术语 → `glossary.yaml`（含 phonetic / speak）。
-3. `node scripts/apply-full-knowledge.mjs && npm run content`
-4. 相关 `version` +1；回报改了哪些 id。
+若用户粘贴了反馈箱提示词，同样按 id 改 `_full/` → apply-full → content → version +1。
 
 正文里的「画面」在 UI 会显示为「结构示意」（脑内建模示意图，不是配图）。
 

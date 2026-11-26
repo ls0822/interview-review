@@ -189,6 +189,32 @@ button.chip.on { background: rgba(61, 156, 253, 0.2); color: #9fd0ff; }
 }
 .word-pop .word-meaning { color: var(--text); line-height: 1.5; }
 
+.field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.field input[type="text"],
+.field input[type="password"],
+.field input:not([type]) {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+}
+code.wrap { word-break: break-all; white-space: normal; }
+
+.section-actions { gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; }
+.section-actions .ghost.on { background: var(--panel-2); color: var(--accent); }
+.kp-section.is-known { border-color: #3ecf8e55; }
+.kp-section.is-unclear { border-color: #f0717855; }
+.tag.good { background: #3ecf8e33; color: var(--good); }
+.tag.bad { background: #f0717833; color: var(--bad); }
+
 .answer-box {
   background: #121a26; border-radius: 12px; padding: 0.85rem;
   border: 1px dashed var(--line); margin-top: 0.75rem;

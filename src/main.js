@@ -4,6 +4,8 @@ import {
   markKnowledgeRead,
   markQa,
   markAlgo,
+  markSection,
+  getSectionMastery,
   stats,
   moduleStats,
   getItemProgress,
@@ -17,6 +19,15 @@ import {
   markNoteDone,
   removeNote,
 } from './feedback.js'
+import { syncAgentInbox, getLastSyncMeta } from './agentSync.js'
+import {
+  loadSyncConfig,
+  saveSyncConfig,
+  clearSyncToken,
+  hasGithubAuth,
+  rawUrl,
+} from './syncConfig.js'
+import { testGithubAuth, markSyncProcessed } from './githubInbox.js'
 
 const app = document.getElementById('app')
 const wordPop = document.getElementById('word-pop')
@@ -144,8 +155,11 @@ function renderHome() {
         <button type="button" data-nav="wrong">错题本</button>
         <button type="button" data-nav="stale">待复习</button>
         <button type="button" data-nav="feedback">${openNoteCount() ? `学习反馈 (${openNoteCount()})` : '学习反馈'}</button>
+        <button type="button" data-action="sync-agent-inbox">同步给 Agent</button>
+        <button type="button" data-nav="sync-settings">同步设置</button>
       </div>
-      <p class="muted">进度与「不懂」反馈都保存在本机。点模块看知识点；看不懂可点「这节不懂」攒一批后交给 Agent。</p>
+      <p class="muted">「明白 / 不懂」给 Agent 改内容。点「同步给 Agent」写入本地并（已配 Token 时）上传 GitHub <code>agent-inbox/</code>。</p>
+      <p id="sync-status" class="muted">${escapeText(formatLastSync())}</p>
     </div>
     <div class="card">
       <h2>模块</h2>
@@ -230,14 +244,15 @@ function renderKnowledge(id) {
   if (!k) return renderMissing()
   const related = pack.qa.filter((q) => q.knowledge_ref === id)
   const pending = listNotes().filter((n) => n.targetId === id && n.status !== 'done')
+  const sectionMastery = getItemProgress(progress, id)?.sections || {}
   app.innerHTML = shell(
     k.title,
     `
     <div class="card kp-meta">
       <div class="row">${priorityTag(k.priority)} <span class="tag">v${k.version}</span> ${statusLabel(k, 'knowledge')}</div>
-      <p class="muted kp-guide">蓝点英文可点看释义与音标。「结构示意」= 帮助脑内建模的文字示意图，不是配图。</p>
+      <p class="muted kp-guide">蓝点英文可点看释义与音标。每节可点「这节明白 / 不懂」；首页可导出标注给 Agent。</p>
     </div>
-    <div class="kp-body">${renderKnowledgeSections(k.body, glossaryMap)}</div>
+    <div class="kp-body">${renderKnowledgeSections(k.body, glossaryMap, sectionMastery)}</div>
     <div class="card">
       <div class="row">
         <button type="button" class="primary" data-action="read-kp" data-id="${k.id}" data-version="${k.version}">标为已读</button>
@@ -308,7 +323,153 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
     sheet.classList.add('hidden')
     sheet.innerHTML = ''
     render()
+    void pushInbox(null, {
+      preferGithub: loadSyncConfig().autoUploadOnMark,
+      allowDownloadFallback: false,
+    })
   }
+}
+
+function formatLastSync() {
+  const last = getLastSyncMeta()
+  if (!last?.syncId) return hasGithubAuth() ? '已配置 GitHub，点同步即可上传' : '未配置 Token：手机请先到「同步设置」'
+  return `上次同步: ${last.syncId} · ${(last.modes || []).join('+') || '-'}`
+}
+
+async function pushInbox(btn, options = {}) {
+  if (!pack) return
+  const label = btn?.textContent
+  if (btn) btn.textContent = '同步中…'
+  const status = document.getElementById('sync-status')
+  try {
+    const result = await syncAgentInbox(pack, progress, options)
+    const msg = result.hint || `同步完成 · ${result.syncId}`
+    if (status) status.textContent = msg
+    if (btn) {
+      const doneLabel = result.modes?.includes('github')
+        ? '已上传'
+        : result.modes?.includes('workspace')
+          ? '已写入'
+          : '已下载'
+      btn.textContent = doneLabel
+      setTimeout(() => {
+        if (label) btn.textContent = label
+      }, 1800)
+    }
+  } catch (err) {
+    if (status) status.textContent = `同步失败: ${err?.message || err}`
+    if (btn && label) btn.textContent = label
+  }
+}
+
+function renderSyncSettings() {
+  const cfg = loadSyncConfig()
+  const last = getLastSyncMeta()
+  app.innerHTML = shell(
+    '同步设置',
+    `
+    <div class="card stack">
+      <p class="muted">Token 只存在本浏览器，不会进题库。建议用 GitHub Fine-grained Token，仅本仓库 Contents 读写。</p>
+      <label class="field">
+        <span>Owner</span>
+        <input id="sync-owner" value="${escapeAttr(cfg.owner)}" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Repo</span>
+        <input id="sync-repo" value="${escapeAttr(cfg.repo)}" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Branch</span>
+        <input id="sync-branch" value="${escapeAttr(cfg.branch)}" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Token</span>
+        <input id="sync-token" type="password" value="${escapeAttr(cfg.token)}" placeholder="ghp_… / github_pat_…" autocomplete="off" />
+      </label>
+      <label class="row" style="gap:0.4rem">
+        <input id="sync-auto" type="checkbox" ${cfg.autoUploadOnMark ? 'checked' : ''} />
+        <span class="muted">标注「明白/不懂」时自动上传 GitHub</span>
+      </label>
+      <div class="row">
+        <button type="button" class="primary" id="sync-save">保存</button>
+        <button type="button" id="sync-test">测试连接</button>
+        <button type="button" id="sync-clear-token">清除 Token</button>
+      </div>
+      <p id="sync-settings-status" class="muted"></p>
+      <p class="muted">远端 latest：<code class="wrap">${escapeText(rawUrl(cfg, cfg.paths.latestMd))}</code></p>
+    </div>
+    <div class="card stack">
+      <h2>批次</h2>
+      <p class="muted">${last?.syncId ? `最近同步 syncId: ${escapeText(last.syncId)}` : '还没有同步过'}</p>
+      <div class="row">
+        <button type="button" class="primary" data-action="sync-agent-inbox">立即同步</button>
+        <button type="button" id="sync-mark-processed" ${last?.syncId ? '' : 'disabled'}>标记最近批次已处理</button>
+        <button type="button" data-nav="home">回首页</button>
+      </div>
+      <p id="sync-processed-status" class="muted"></p>
+    </div>`,
+    { back: 'home' },
+  )
+
+  const statusEl = () => document.getElementById('sync-settings-status')
+
+  document.getElementById('sync-save').onclick = (ev) => {
+    ev.stopPropagation()
+    saveSyncConfig({
+      owner: document.getElementById('sync-owner').value.trim(),
+      repo: document.getElementById('sync-repo').value.trim(),
+      branch: document.getElementById('sync-branch').value.trim() || 'main',
+      token: document.getElementById('sync-token').value.trim(),
+      autoUploadOnMark: document.getElementById('sync-auto').checked,
+    })
+    if (statusEl()) statusEl().textContent = '已保存到本浏览器'
+    render()
+  }
+
+  document.getElementById('sync-test').onclick = async (ev) => {
+    ev.stopPropagation()
+    saveSyncConfig({
+      owner: document.getElementById('sync-owner').value.trim(),
+      repo: document.getElementById('sync-repo').value.trim(),
+      branch: document.getElementById('sync-branch').value.trim() || 'main',
+      token: document.getElementById('sync-token').value.trim(),
+      autoUploadOnMark: document.getElementById('sync-auto').checked,
+    })
+    if (statusEl()) statusEl().textContent = '测试中…'
+    try {
+      const info = await testGithubAuth()
+      if (statusEl()) statusEl().textContent = `连接成功：${info.fullName}（默认分支 ${info.defaultBranch}）`
+    } catch (err) {
+      if (statusEl()) statusEl().textContent = `失败：${err?.message || err}`
+    }
+  }
+
+  document.getElementById('sync-clear-token').onclick = (ev) => {
+    ev.stopPropagation()
+    clearSyncToken()
+    render()
+  }
+
+  document.getElementById('sync-mark-processed').onclick = async (ev) => {
+    ev.stopPropagation()
+    const meta = getLastSyncMeta()
+    const out = document.getElementById('sync-processed-status')
+    if (!meta?.syncId) return
+    if (out) out.textContent = '写入 processed.json…'
+    try {
+      await markSyncProcessed(meta.syncId, 'marked-from-app')
+      if (out) out.textContent = `已标记 processed: ${meta.syncId}`
+    } catch (err) {
+      if (out) out.textContent = `失败：${err?.message || err}`
+    }
+  }
+}
+
+function escapeAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
 }
 
 function renderFeedback() {
@@ -319,9 +480,10 @@ function renderFeedback() {
     '学习反馈',
     `
     <div class="card stack">
-      <p>看知识点时点「这节不懂」或「整篇不懂」，会攒在这里。攒一批后复制下面提示词，粘贴给 Cursor Agent，就能按 id 批量补充。</p>
+      <p>「不懂」会写入本机，并同步到 <code>agent-inbox/latest.md</code> 给 Agent 改题。也可复制下面提示词粘贴到对话。</p>
       <div class="row">
-        <button type="button" class="primary" id="copy-agent-prompt" ${notes.length ? '' : 'disabled'}>复制给 Agent</button>
+        <button type="button" class="primary" data-action="sync-agent-inbox">同步给 Agent</button>
+        <button type="button" id="copy-agent-prompt" ${notes.length ? '' : 'disabled'}>复制提示词</button>
         <button type="button" data-nav="home">回首页</button>
       </div>
       <pre class="export-box" id="agent-prompt-box">${escapeText(prompt)}</pre>
@@ -544,6 +706,7 @@ function render() {
     else if (route.name === 'stale') renderWrongOrStale('stale')
     else if (route.name === 'algo') renderAlgo(route.args[0])
     else if (route.name === 'feedback') renderFeedback()
+    else if (route.name === 'sync-settings') renderSyncSettings()
     else renderHome()
   } catch (err) {
     console.error(err)
@@ -605,10 +768,28 @@ function bindGlobalClicks() {
         render()
         return
       }
+      if (action === 'section-known') {
+        const section = actionEl.dataset.section || ''
+        const kid = route.args[0]
+        if (!kid || !section) return
+        const cur = getSectionMastery(progress, kid, section)
+        markSection(progress, kid, section, cur === 'known' ? null : 'known')
+        render()
+        void pushInbox(null, {
+          preferGithub: loadSyncConfig().autoUploadOnMark,
+          allowDownloadFallback: false,
+        })
+        return
+      }
       if (action === 'feedback-section') {
         const section = actionEl.dataset.section || ''
         const k = pack.knowledge.find((x) => x.id === route.args[0])
         if (!k) return
+        markSection(progress, k.id, section, 'unclear')
+        void pushInbox(null, {
+          preferGithub: loadSyncConfig().autoUploadOnMark,
+          allowDownloadFallback: false,
+        })
         openFeedbackSheet({
           targetId: k.id,
           title: k.title,
@@ -616,6 +797,10 @@ function bindGlobalClicks() {
           section,
           kind: 'unclear',
         })
+        return
+      }
+      if (action === 'sync-agent-inbox') {
+        void pushInbox(actionEl, { preferGithub: true })
         return
       }
       if (action === 'feedback-open') {

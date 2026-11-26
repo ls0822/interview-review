@@ -1,0 +1,14 @@
+{
+  "owner": "ls0822",
+  "repo": "interview-review",
+  "branch": "main",
+  "paths": {
+    "latestMd": "agent-inbox/latest.md",
+    "latestJson": "agent-inbox/latest.json",
+    "processed": "agent-inbox/processed.json"
+  },
+  "latestMdUrl": "https://raw.githubusercontent.com/ls0822/interview-review/main/agent-inbox/latest.md",
+  "latestJsonUrl": "https://raw.githubusercontent.com/ls0822/interview-review/main/agent-inbox/latest.json",
+  "processedUrl": "https://raw.githubusercontent.com/ls0822/interview-review/main/agent-inbox/processed.json",
+  "note": "Agent 拉取：读本文件 → 拉 latest.json（看 syncId/status）与 latest.md → 若 syncId 已在 processed.json 则跳过；处理完把 syncId 写入 processed.json"
+}

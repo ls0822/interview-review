@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: launch、async、withContext 与 Scope
 priority: P0
-version: 1
+version: 2
 ---
 
 ## 一句话
@@ -106,3 +106,4 @@ coroutineScope
 2. **两个 async 放在 viewModelScope 里不 await。** 追问：异常去哪了？Deferred 里。若没人 await，又不是监督结构，还可能把父 Scope 弄失败。要用 coroutineScope 包住并 await。
 3. **上传放在 viewModelScope。** 追问：退出页面会怎样？onCleared 取消，上传中断。改放业务 Scope 或任务队列。
 4. **自己建 Scope 用普通 Job，一个请求失败全部停。** 追问：viewModelScope 为什么不是这样？它的 Job 是 SupervisorJob。
+5. **`launch`/`async` 里的方法是不是都是挂起函数？** 不是。lambda 类型是 `suspend CoroutineScope.() -> …`，提供的是**可挂起的执行环境**，不是批量改写里面的函数签名。普通 `fun` 照样是普通函数；要在普通函数里调 `delay`，必须自己改成 `suspend fun`。回调 API 也不是挂起，要结果请用 `suspendCancellableCoroutine`（见「回调转挂起」知识点）。

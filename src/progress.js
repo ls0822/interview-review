@@ -27,9 +27,59 @@ function ensure(state, id) {
       done: false,
       doneVersion: 0,
       inWrongBook: false,
+      /** 章节掌握：{ '原理': 'known' | 'unclear' } */
+      sections: {},
     }
   }
+  if (!state.items[id].sections) state.items[id].sections = {}
   return state.items[id]
+}
+
+/** 章节标注：known=明白 / unclear=不懂 */
+export function markSection(state, id, section, mastery) {
+  const p = ensure(state, id)
+  if (!section) return
+  if (!mastery) delete p.sections[section]
+  else p.sections[section] = mastery
+  saveProgress(state)
+}
+
+export function getSectionMastery(state, id, section) {
+  return state.items[id]?.sections?.[section] || null
+}
+
+/** 导出给 Agent：已明白 / 不懂章节 + 进度摘要 */
+export function buildMasteryExport(pack, state) {
+  const lines = [
+    '请根据我的学习标注整理协程（或其它模块）复习状态，并针对「未明白」处加深讲解。',
+    '',
+    '## 知识点章节标注',
+  ]
+  let any = false
+  for (const k of pack.knowledge || []) {
+    const secs = state.items[k.id]?.sections || {}
+    const entries = Object.entries(secs)
+    if (!entries.length) continue
+    any = true
+    lines.push(`### ${k.title} (${k.id})`)
+    for (const [sec, m] of entries) {
+      lines.push(`- [${m === 'known' ? '明白' : '不懂'}] ${sec}`)
+    }
+    lines.push('')
+  }
+  if (!any) lines.push('（暂无章节标注）', '')
+
+  lines.push('## 问答掌握')
+  const known = (pack.qa || []).filter((q) => state.items[q.id]?.status === 'known')
+  const half = (pack.qa || []).filter((q) => state.items[q.id]?.status === 'half')
+  const unknown = (pack.qa || []).filter((q) => state.items[q.id]?.status === 'unknown')
+  lines.push(`- 会了: ${known.length} · 半会: ${half.length} · 不会: ${unknown.length}`)
+  const focus = [...half, ...unknown].filter((q) => q.module === 'coroutine').slice(0, 30)
+  if (focus.length) {
+    lines.push('协程相关待加强问答：')
+    focus.forEach((q) => lines.push(`- [${state.items[q.id]?.status}] ${q.title} (${q.id})`))
+  }
+  return lines.join('\n')
 }
 
 /** After content pack loads, mark outdated mastery as stale */
