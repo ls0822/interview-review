@@ -280,14 +280,15 @@ function isWeChatBrowser() {
 
 function speechErrorHint(code) {
   const map = {
-    'not-allowed': '麦克风被拒绝：请在浏览器站点设置里允许麦克风',
-    'service-not-allowed': '浏览器禁止语音服务（常见于非 HTTPS）',
-    network: '识别服务连不上（国内网络/防火墙常见）。可改用键盘，或系统自带语音输入',
-    'no-speech': '没听到声音，请靠近麦克风再说一次',
+    'not-allowed': '麦克风被拒绝：地址栏左侧站点设置 → 允许麦克风后重试',
+    'service-not-allowed': '浏览器禁止语音服务（需 localhost 或 HTTPS）',
+    network:
+      '识别云服务连不上（Chrome 依赖 Google，国内很常见）。请改用 Safari，或 Mac 键盘上 Fn/地球键 语音输入后粘贴到这里',
+    'no-speech': '没检测到说话。请靠近麦克风，说完后再点「停止」',
     aborted: '已取消',
     'audio-capture': '找不到麦克风',
     'bad-grammar': '识别配置异常',
-    'language-not-supported': '当前环境不支持中文语音识别',
+    'language-not-supported': '当前环境不支持中文语音识别，请换 Safari 试试',
   }
   return map[code] || `语音识别失败：${code || 'unknown'}`
 }
@@ -299,6 +300,7 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
   const SpeechCtor = window.SpeechRecognition || window.webkitSpeechRecognition
   const inWeChat = isWeChatBrowser()
   const canSpeech = Boolean(SpeechCtor) && !inWeChat
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent || '')
   sheet.classList.remove('hidden')
   sheet.innerHTML = `
     <h3>记下疑问（稍后可批量交给 Agent）</h3>
@@ -321,17 +323,20 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
       }
       <button type="button" id="feedback-cancel">取消</button>
     </div>
-    <p id="feedback-mic-status" class="muted">${
+    <p id="feedback-mic-status" class="mic-status">${
       inWeChat
-        ? '微信内置浏览器通常无法语音识别。请用系统键盘语音，或用 Safari/Chrome 打开 Pages。'
+        ? '微信内置浏览器通常无法语音识别。请用系统键盘语音，或用 Safari/Chrome 打开。'
         : canSpeech
-          ? '可点「语音输入」：允许麦克风后说一句，识别结果会写入上方输入框。'
+          ? isSafari
+            ? '点「语音输入」开始 → 说话 → 再点「停止」。Safari 一般用系统识别，国内更稳。'
+            : '点「语音输入」开始 → 说话 → 再点「停止」。Chrome 需连 Google 识别云；若不出字请看下方红字，或改用 Safari / 系统语音输入。'
           : '当前浏览器不支持 Web Speech，请直接打字或用系统键盘语音。'
     }</p>`
   let selectedKind = kind
   let recognition = null
   let listening = false
   let baseText = ''
+  let gotResult = false
 
   sheet.querySelectorAll('[data-kind]').forEach((btn) => {
     btn.onclick = (ev) => {
@@ -341,22 +346,31 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
     }
   })
 
-  const setMicUi = (on, statusText) => {
+  const setMicUi = (on, statusText, level = '') => {
     const mic = sheet.querySelector('#feedback-mic')
     const status = sheet.querySelector('#feedback-mic-status')
     if (mic) {
       mic.classList.toggle('recording', on)
       mic.textContent = on ? '停止' : '语音输入'
     }
-    if (status && statusText != null) status.textContent = statusText
+    if (status && statusText != null) {
+      status.textContent = statusText
+      status.classList.toggle('is-error', level === 'error')
+      status.classList.toggle('is-ok', level === 'ok')
+    }
   }
 
-  const stopMic = () => {
+  const stopMic = (manual = false) => {
     listening = false
     try {
-      recognition?.stop()
+      if (manual) recognition?.stop()
+      else recognition?.abort?.()
     } catch {
-      /* ignore */
+      try {
+        recognition?.stop()
+      } catch {
+        /* ignore */
+      }
     }
     recognition = null
     setMicUi(false)
@@ -364,36 +378,47 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
 
   const micBtn = sheet.querySelector('#feedback-mic')
   if (micBtn) {
-    micBtn.onclick = async (ev) => {
+    micBtn.onclick = (ev) => {
       ev.stopPropagation()
-      const status = sheet.querySelector('#feedback-mic-status')
       const ta = sheet.querySelector('#feedback-text')
       if (listening) {
-        stopMic()
-        if (status) status.textContent = '已停止'
-        return
-      }
-
-      // 先要麦克风权限，失败时错误更明确
-      if (navigator.mediaDevices?.getUserMedia) {
+        // 用户主动停止：让引擎吐出最终结果
+        listening = false
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-          stream.getTracks().forEach((t) => t.stop())
+          recognition?.stop()
         } catch {
-          if (status) status.textContent = speechErrorHint('not-allowed')
-          return
+          /* ignore */
         }
+        setMicUi(
+          false,
+          gotResult || ta.value.trim()
+            ? '已停止，文字应在上方输入框'
+            : '已停止，仍无文字：多半是识别云连不上。请换 Safari，或用键盘 Fn/地球键语音输入',
+          gotResult || ta.value.trim() ? 'ok' : 'error',
+        )
+        return
       }
 
       recognition = new SpeechCtor()
       recognition.lang = 'zh-CN'
-      recognition.continuous = false
+      // continuous：说较长一句时不容易被提前掐断；用户点「停止」结束
+      recognition.continuous = true
       recognition.interimResults = true
       recognition.maxAlternatives = 1
       baseText = ta.value
+      gotResult = false
       listening = true
-      setMicUi(true, '正在听…请说完一句（识别中）')
+      setMicUi(true, '正在听…请说话，说完点「停止」', '')
 
+      recognition.onstart = () => {
+        setMicUi(true, '麦克风已开，请说话…', '')
+      }
+      recognition.onaudiostart = () => {
+        setMicUi(true, '已采到声音，识别中…', '')
+      }
+      recognition.onspeechstart = () => {
+        setMicUi(true, '检测到说话…', '')
+      }
       recognition.onresult = (event) => {
         let interim = ''
         let finalChunk = ''
@@ -403,31 +428,51 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
           else interim += piece
         }
         if (finalChunk) {
-          const join = baseText && !/\s$/.test(baseText) ? ' ' : ''
+          gotResult = true
+          const join = baseText && !/\s$/.test(baseText) ? '' : ''
           baseText = `${baseText}${join}${finalChunk}`
           ta.value = baseText
-        } else {
+          setMicUi(true, `已识别：${finalChunk}`, 'ok')
+        } else if (interim) {
+          gotResult = true
           ta.value = `${baseText}${interim}`
+          setMicUi(true, `识别中：${interim}`, '')
         }
       }
       recognition.onerror = (event) => {
         const code = event.error || 'unknown'
-        if (code !== 'aborted' && status) status.textContent = speechErrorHint(code)
+        if (code === 'aborted') return
         listening = false
-        setMicUi(false)
+        setMicUi(false, speechErrorHint(code), 'error')
         recognition = null
       }
       recognition.onend = () => {
-        const was = listening
+        if (listening) {
+          // continuous 被浏览器打断时自动续听
+          try {
+            recognition.start()
+            setMicUi(true, '继续听…说完请点「停止」', '')
+            return
+          } catch {
+            listening = false
+          }
+        }
         listening = false
-        setMicUi(false, was ? (ta.value.trim() ? '已写入输入框，可继续改或再点语音' : '结束了但没有识别到文字') : undefined)
+        const ok = gotResult || Boolean(ta.value.trim() && ta.value !== baseText) || Boolean(ta.value.trim())
+        setMicUi(
+          false,
+          ok
+            ? '识别结束，请查看上方输入框'
+            : '没有识别到文字。常见原因：Chrome 连不上 Google 识别云。请换 Safari，或用系统语音输入后粘贴',
+          ok ? 'ok' : 'error',
+        )
         recognition = null
       }
       try {
         recognition.start()
       } catch (err) {
         listening = false
-        setMicUi(false, `无法启动：${err?.message || err}`)
+        setMicUi(false, `无法启动：${err?.message || err}`, 'error')
         recognition = null
       }
     }
@@ -435,13 +480,13 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
 
   sheet.querySelector('#feedback-cancel').onclick = (ev) => {
     ev.stopPropagation()
-    stopMic()
+    stopMic(true)
     sheet.classList.add('hidden')
     sheet.innerHTML = ''
   }
   sheet.querySelector('#feedback-save').onclick = (ev) => {
     ev.stopPropagation()
-    stopMic()
+    stopMic(true)
     const text = sheet.querySelector('#feedback-text').value
     upsertNote({
       targetId,

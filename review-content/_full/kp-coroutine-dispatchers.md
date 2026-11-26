@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: Dispatcher 与线程池选择
 priority: P0
-version: 3
+version: 4
 order: 20
 requires: [kp-coroutine-basics]
 ---
@@ -69,7 +69,7 @@ val named = Executors.newFixedThreadPool(4) { r ->
 
 ## 画面
 
-![Dispatcher 与 withContext 换线程](./assets/diagrams/coroutine-dispatchers.svg)
+![Dispatcher 与 withContext 换线程](./assets/diagrams/coroutine-dispatchers.svg?v=2)
 
 ```text
 viewModelScope 自带 Main.immediate

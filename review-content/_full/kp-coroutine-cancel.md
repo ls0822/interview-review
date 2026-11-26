@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程取消、异常与监督
 priority: P0
-version: 4
+version: 5
 order: 50
 requires: [kp-coroutine-builders]
 ---
@@ -96,7 +96,7 @@ supervisorScope {
 
 ## 画面
 
-![普通父 Job 下失败会取消兄弟](./assets/diagrams/coroutine-cancel-job.svg)
+![普通父 Job 下失败会取消兄弟](./assets/diagrams/coroutine-cancel-job.svg?v=2)
 
 ```text
 cancel()

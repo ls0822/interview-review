@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程模型：线程、挂起与续体
 priority: P0
-version: 5
+version: 6
 order: 10
 ---
 
@@ -74,7 +74,7 @@ fun mainThreadLoad() {
 
 ## 画面
 
-![协程模型：线程工人与协程工单](./assets/diagrams/coroutine-model.svg)
+![协程模型：线程工人与协程工单](./assets/diagrams/coroutine-model.svg?v=2)
 
 ```text
 一条线程（一个工人）

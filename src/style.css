@@ -168,6 +168,9 @@ button.chip.on { background: rgba(61, 156, 253, 0.2); color: #9fd0ff; }
   background: rgba(240, 113, 120, 0.25);
   color: var(--bad);
 }
+.mic-status { margin: 0.35rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.mic-status.is-error { color: var(--bad); font-weight: 600; }
+.mic-status.is-ok { color: var(--good); }
 .feedback-item {
   padding: 0.75rem 0; border-bottom: 1px solid var(--line);
 }
