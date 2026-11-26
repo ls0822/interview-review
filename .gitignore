@@ -5,3 +5,4 @@ dist
 gitdir/
 .gh-token.json
 *.token.json
+.tmp-api/
