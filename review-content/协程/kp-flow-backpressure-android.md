@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: Flow 背压、操作符与 Android 收集
 priority: P0
-version: 1
+version: 2
+order: 90
+requires: [kp-coroutine-flow]
 ---
 
 ## 一句话

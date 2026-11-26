@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: Flow 冷热流、StateFlow 与 replay
 priority: P0
-version: 1
+version: 2
+order: 80
+requires: [kp-coroutine-builders]
 ---
 
 ## 一句话

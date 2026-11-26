@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: Channel、Mutex 与限流
 priority: P0
-version: 1
+version: 2
+order: 70
+requires: [kp-coroutine-builders]
 ---
 
 ## 一句话

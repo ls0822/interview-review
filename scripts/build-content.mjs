@@ -118,6 +118,12 @@ for (const file of walkMd(contentRoot)) {
     priority: data.priority || 'P1',
     version: Number(data.version || 1),
     knowledge_ref: data.knowledge_ref || null,
+    requires: Array.isArray(data.requires)
+      ? data.requires
+      : data.requires
+        ? [data.requires]
+        : [],
+    order: data.order != null ? Number(data.order) : null,
     source: path.relative(contentRoot, file),
   }
   if (data.type === 'knowledge') {

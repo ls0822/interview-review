@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: 协程取消、异常与监督
 priority: P0
-version: 2
+version: 3
+order: 50
+requires: [kp-coroutine-builders]
 ---
 
 ## 一句话

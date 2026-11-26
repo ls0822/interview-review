@@ -1,4 +1,10 @@
 {
-  "updatedAt": null,
-  "processed": []
+  "updatedAt": "2026-11-26T09:25:00.000Z",
+  "processed": [
+    {
+      "syncId": "sync-verify-local-001",
+      "processedAt": "2026-11-26T09:25:00.000Z",
+      "note": "kp-coroutine-basics 原理#5 补充 yield vs ensureActive 对照；version 4"
+    }
+  ]
 }

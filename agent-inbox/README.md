@@ -25,4 +25,6 @@ npm run pull-inbox
 
 1. 读 `source.json` → 拉 `latestJsonUrl` / `latestMdUrl` / `processedUrl`
 2. 看 `latest.json.syncId`：若已在 `processed.json.processed[].syncId` → **跳过**
-3. 否则按「不懂」改 `review-content/`，然后把该 `syncId` 写入 `processed.json`（App 设置页也可点「标记最近批次已处理」）
+3. 否则按「不懂」改 `review-content/`（遵守 `docs/CONTENT_SPEC.md` / `CONTENT_BOUNDARY.md`），`npm run validate-content`，然后把该 `syncId` 写入 `processed.json`
+
+本地验证示例：`sync-verify-local-001` 已处理（`kp-coroutine-basics` 原理 #5）。

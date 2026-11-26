@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: Dispatcher 与线程池选择
 priority: P0
-version: 1
+version: 2
+order: 20
+requires: [kp-coroutine-basics]
 ---
 
 ## 一句话

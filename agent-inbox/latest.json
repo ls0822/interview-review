@@ -1,7 +1,29 @@
 {
-  "syncId": null,
-  "status": "empty",
-  "updatedAt": null,
-  "progress": { "items": {} },
-  "notes": []
+  "syncId": "sync-verify-local-001",
+  "status": "pending",
+  "updatedAt": "2026-11-26T09:20:00.000Z",
+  "notes": [
+    {
+      "id": "fb-verify-1",
+      "targetId": "kp-coroutine-basics",
+      "title": "协程模型：线程、挂起与续体",
+      "module": "coroutine",
+      "kind": "unclear",
+      "section": "原理",
+      "text": "第五点「紧循环会饿死邻居」还是有点抽象：yield 和 ensureActive 到底谁先谁后、各解决什么问题？想要一句对照。",
+      "status": "open"
+    }
+  ],
+  "progress": {
+    "items": {
+      "kp-coroutine-basics": {
+        "sections": {
+          "一句话": "known",
+          "组成与结构": "known",
+          "原理": "unclear",
+          "使用与实践": "known"
+        }
+      }
+    }
+  }
 }

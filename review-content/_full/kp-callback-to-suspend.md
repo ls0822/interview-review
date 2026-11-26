@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: 回调转挂起与 suspendCancellableCoroutine
 priority: P0
-version: 1
+version: 2
+order: 60
+requires: [kp-coroutine-basics]
 ---
 
 ## 一句话

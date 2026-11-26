@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "content": "node scripts/build-content.mjs",
+    "validate-content": "node scripts/validate-content.mjs",
     "dev": "npm run content && vite",
-    "build": "npm run content && vite build",
+    "build": "npm run validate-content && npm run content && vite build",
     "preview": "vite preview",
     "pull-inbox": "node scripts/pull-agent-inbox.mjs"
   },

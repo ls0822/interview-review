@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: launch、async、withContext 与 Scope
 priority: P0
-version: 2
+version: 3
+order: 40
+requires: [kp-coroutine-basics, kp-coroutine-dispatchers]
 ---
 
 ## 一句话

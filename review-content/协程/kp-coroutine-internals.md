@@ -4,7 +4,9 @@ type: knowledge
 module: coroutine
 title: 挂起实现：状态机、CPS 与续体拦截
 priority: P1
-version: 1
+version: 2
+order: 100
+requires: [kp-coroutine-basics]
 ---
 
 ## 一句话

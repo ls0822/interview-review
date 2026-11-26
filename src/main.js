@@ -278,6 +278,7 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
   const sheet = document.getElementById('feedback-sheet')
   if (!sheet) return
   const kindLabel = { unclear: '不懂，要解释更清楚', fix: '内容可能有误', expand: '要加深 / 补例子' }
+  const canSpeech = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
   sheet.classList.remove('hidden')
   sheet.innerHTML = `
     <h3>记下疑问（稍后可批量交给 Agent）</h3>
@@ -293,9 +294,18 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
     <textarea id="feedback-text" rows="4" placeholder="例如：粘包拆包还是不懂，想看一个收包循环的小例子……"></textarea>
     <div class="row" style="margin-top:0.75rem">
       <button type="button" class="primary" id="feedback-save">保存到反馈箱</button>
+      ${
+        canSpeech
+          ? `<button type="button" id="feedback-mic" class="mic-btn" title="语音转文字">语音输入</button>`
+          : `<span class="muted">当前浏览器不支持语音输入</span>`
+      }
       <button type="button" id="feedback-cancel">取消</button>
-    </div>`
+    </div>
+    <p id="feedback-mic-status" class="muted"></p>`
   let selectedKind = kind
+  let recognition = null
+  let listening = false
+
   sheet.querySelectorAll('[data-kind]').forEach((btn) => {
     btn.onclick = (ev) => {
       ev.stopPropagation()
@@ -303,13 +313,86 @@ function openFeedbackSheet({ targetId, title, module, section = '', kind = 'uncl
       sheet.querySelectorAll('[data-kind]').forEach((b) => b.classList.toggle('on', b === btn))
     }
   })
+
+  const stopMic = () => {
+    listening = false
+    try {
+      recognition?.stop()
+    } catch {
+      /* ignore */
+    }
+    const mic = sheet.querySelector('#feedback-mic')
+    if (mic) {
+      mic.classList.remove('recording')
+      mic.textContent = '语音输入'
+    }
+  }
+
+  const micBtn = sheet.querySelector('#feedback-mic')
+  if (micBtn) {
+    micBtn.onclick = (ev) => {
+      ev.stopPropagation()
+      const status = sheet.querySelector('#feedback-mic-status')
+      const ta = sheet.querySelector('#feedback-text')
+      if (listening) {
+        stopMic()
+        if (status) status.textContent = '已停止'
+        return
+      }
+      const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition
+      recognition = new Ctor()
+      recognition.lang = 'zh-CN'
+      recognition.continuous = true
+      recognition.interimResults = true
+      let committed = ta.value
+      recognition.onresult = (event) => {
+        let interim = ''
+        let finalChunk = ''
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const piece = event.results[i][0].transcript
+          if (event.results[i].isFinal) finalChunk += piece
+          else interim += piece
+        }
+        if (finalChunk) {
+          committed = `${committed}${committed && !/\s$/.test(committed) ? ' ' : ''}${finalChunk}`
+        }
+        ta.value = `${committed}${interim}`
+      }
+      recognition.onerror = (event) => {
+        if (status) status.textContent = `语音识别：${event.error || '失败'}`
+        stopMic()
+      }
+      recognition.onend = () => {
+        if (listening) {
+          // continuous 被系统打断时尝试续听
+          try {
+            recognition.start()
+          } catch {
+            stopMic()
+          }
+        }
+      }
+      try {
+        recognition.start()
+        listening = true
+        micBtn.classList.add('recording')
+        micBtn.textContent = '停止'
+        if (status) status.textContent = '正在听…（再说一次疑问，点停止结束）'
+      } catch (err) {
+        if (status) status.textContent = `无法启动麦克风：${err?.message || err}`
+      }
+    }
+  }
+
   sheet.querySelector('#feedback-cancel').onclick = (ev) => {
     ev.stopPropagation()
+    stopMic()
     sheet.classList.add('hidden')
     sheet.innerHTML = ''
   }
   sheet.querySelector('#feedback-save').onclick = (ev) => {
     ev.stopPropagation()
+    stopMic()
     const text = sheet.querySelector('#feedback-text').value
     upsertNote({
       targetId,
