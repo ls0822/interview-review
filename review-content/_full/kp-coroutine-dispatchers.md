@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: Dispatcher 与线程池选择
 priority: P0
-version: 2
+version: 3
 order: 20
 requires: [kp-coroutine-basics]
 ---
@@ -68,6 +68,8 @@ val named = Executors.newFixedThreadPool(4) { r ->
 `launch(Dispatchers.IO) { x = read() }; use(x)` 是错的：`use(x)` 不会等 IO 完成。要等就 `withContext` 或 `async`/`await`。
 
 ## 画面
+
+![Dispatcher 与 withContext 换线程](./assets/diagrams/coroutine-dispatchers.svg)
 
 ```text
 viewModelScope 自带 Main.immediate

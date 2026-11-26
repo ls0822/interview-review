@@ -4,7 +4,7 @@ type: knowledge
 module: coroutine
 title: 协程取消、异常与监督
 priority: P0
-version: 3
+version: 4
 order: 50
 requires: [kp-coroutine-builders]
 ---
@@ -95,6 +95,8 @@ supervisorScope {
 这里的 `runCatching` 若用在会取消的子协程里，仍要把 `CancellationException` 排除，否则父级取消时子协程把取消吃掉，表现为「取消不干净」。
 
 ## 画面
+
+![普通父 Job 下失败会取消兄弟](./assets/diagrams/coroutine-cancel-job.svg)
 
 ```text
 cancel()
