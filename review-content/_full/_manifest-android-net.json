@@ -1,0 +1,33 @@
+{
+  "ids": [
+    "kp-handler-system",
+    "kp-activity-lifecycle",
+    "kp-touch-dispatch",
+    "kp-service-bg",
+    "kp-anr",
+    "kp-tcp",
+    "kp-udp",
+    "kp-https-cert",
+    "kp-quic",
+    "kp-long-connection",
+    "kp-websocket",
+    "kp-okhttp",
+    "kp-dns-cdn",
+    "kp-crypto-basic",
+    "kp-net-optimize",
+    "kp-arch-patterns",
+    "kp-componentization",
+    "kp-router",
+    "kp-sdk-api",
+    "kp-compose-vs-view",
+    "kp-compose-recomposition",
+    "kp-compose-side-effects",
+    "kp-compose-interop",
+    "kp-image-loader",
+    "kp-di",
+    "kp-framework-stack",
+    "kp-project-live-base",
+    "kp-project-im",
+    "kp-project-offline-upload"
+  ]
+}

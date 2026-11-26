@@ -1,0 +1,252 @@
+# speak: 系统朗读用的英文读法（缩写按字母念；驼峰拆开）
+# phonetic: IPA 音标，界面会原样展示
+
+- word: Handler
+  phonetic: /ˈhændlər/
+  speak: Handler
+  meaning: 绑定 Looper，负责把 Message/Runnable 入队并在对应线程执行。
+
+- word: Looper
+  phonetic: /ˈluːpər/
+  speak: Looper
+  meaning: 线程消息循环，从 MessageQueue 取消息并分发给 Handler。
+
+- word: MessageQueue
+  phonetic: /ˈmesɪdʒ kjuː/
+  speak: Message Queue
+  meaning: 按执行时间排序的消息队列，next() 在无消息时阻塞。
+
+- word: Message
+  phonetic: /ˈmesɪdʒ/
+  speak: Message
+  meaning: Handler 队列中的消息单元，可带 what/arg/obj/callback。
+
+- word: Runnable
+  phonetic: /ˈrʌnəbl/
+  speak: Runnable
+  meaning: 可执行任务接口；Handler.post 会包成带 callback 的 Message。
+
+- word: TCP
+  phonetic: /ˌtiː siː ˈpiː/
+  speak: T C P
+  meaning: 面向连接的可靠传输协议，有握手、重传、拥塞控制。
+
+- word: UDP
+  phonetic: /ˌjuː diː ˈpiː/
+  speak: U D P
+  meaning: 无连接尽力交付，开销小，上层可自建可靠。
+
+- word: TLS
+  phonetic: /ˌtiː el ˈes/
+  speak: T L S
+  meaning: 传输层安全协议；HTTPS 在 HTTP 下叠加 TLS。
+
+- word: SSL
+  phonetic: /ˌes es ˈel/
+  speak: S S L
+  meaning: TLS 前身；口语里仍常说 SSL，实际多指 TLS。
+
+- word: HTTPS
+  phonetic: /ˌeɪtʃ tiː tiː piː ˈes/
+  speak: H T T P S
+  meaning: HTTP over TLS，提供加密与服务端身份校验。
+
+- word: HTTP
+  phonetic: /ˌeɪtʃ tiː tiː ˈpiː/
+  speak: H T T P
+  meaning: 应用层超文本传输协议。
+
+- word: QUIC
+  phonetic: /kwɪk/
+  speak: quick
+  meaning: 基于 UDP 的加密传输，HTTP/3 的基础。
+
+- word: DNS
+  phonetic: /ˌdiː en ˈes/
+  speak: D N S
+  meaning: 域名系统，把域名解析成 IP。
+
+- word: CDN
+  phonetic: /ˌsiː diː ˈen/
+  speak: C D N
+  meaning: 内容分发网络，就近缓存静态资源。
+
+- word: WebSocket
+  phonetic: /ˈweb ˌsɒkɪt/
+  speak: Web Socket
+  meaning: 基于 HTTP 升级的全双工长连接协议。
+
+- word: Socket
+  phonetic: /ˈsɒkɪt/
+  speak: Socket
+  meaning: 套接字；进程通过它收发网络数据。
+
+- word: OkHttp
+  phonetic: /ˈoʊˈkeɪ ˌeɪtʃ tiː tiː ˈpiː/
+  speak: OK H T T P
+  meaning: Android 主流 HTTP 客户端，核心是连接池与拦截器链。
+
+- word: Dispatcher
+  phonetic: /dɪˈspætʃər/
+  speak: Dispatcher
+  meaning: 协程调度器，决定任务在哪类线程执行。
+
+- word: Continuation
+  phonetic: /kənˌtɪnjuˈeɪʃn/
+  speak: Continuation
+  meaning: 挂起时保存的续体，用来从断点恢复执行。
+
+- word: Coroutine
+  phonetic: /ˌkɔːrəˈtiːn/
+  speak: Coroutine
+  meaning: 可挂起的轻量任务，跑在线程之上。
+
+- word: StateFlow
+  phonetic: /steɪt floʊ/
+  speak: State Flow
+  meaning: 带当前值的热流，适合界面状态。
+
+- word: SharedFlow
+  phonetic: /ʃeərd floʊ/
+  speak: Shared Flow
+  meaning: 可配置 replay 的热流，适合事件总线式分发。
+
+- word: Flow
+  phonetic: /floʊ/
+  speak: Flow
+  meaning: Kotlin 异步数据流；默认冷流，有人 collect 才生产。
+
+- word: Channel
+  phonetic: /ˈtʃænl/
+  speak: Channel
+  meaning: 协程间通信队列，支持挂起的 send/receive。
+
+- word: Mutex
+  phonetic: /ˈmjuːteks/
+  speak: Mutex
+  meaning: 互斥锁；协程版会挂起等待，默认不可重入。
+
+- word: Semaphore
+  phonetic: /ˈseməfɔːr/
+  speak: Semaphore
+  meaning: 信号量，用许可数限制并发。
+
+- word: Job
+  phonetic: /dʒɒb/
+  speak: Job
+  meaning: 协程生命周期句柄，可 cancel / join。
+
+- word: Deferred
+  phonetic: /dɪˈfɜːrd/
+  speak: Deferred
+  meaning: 带返回值的 Job，async 的返回类型。
+
+- word: volatile
+  phonetic: /ˈvɒlətaɪl/
+  speak: volatile
+  meaning: Java 关键字，保证可见性与有序性（不保证原子复合操作）。
+
+- word: synchronized
+  phonetic: /ˈsɪŋkrənaɪzd/
+  speak: synchronized
+  meaning: Java 内置互斥，可修饰方法或代码块。
+
+- word: Hilt
+  phonetic: /hɪlt/
+  speak: Hilt
+  meaning: 官方 DI 方案，编译期生成，基于 Dagger。
+
+- word: Koin
+  phonetic: /kɔɪn/
+  speak: Coin
+  meaning: Kotlin 侧常用的运行时依赖注入框架。
+
+- word: Dagger
+  phonetic: /ˈdæɡər/
+  speak: Dagger
+  meaning: 编译期依赖注入框架。
+
+- word: Compose
+  phonetic: /kəmˈpoʊz/
+  speak: Compose
+  meaning: Jetpack Compose，声明式 UI 工具包。
+
+- word: Recomposition
+  phonetic: /ˌriːˌkɒmpəˈzɪʃn/
+  speak: Recomposition
+  meaning: Compose 在状态变化后重新执行相关 @Composable。
+
+- word: ViewModel
+  phonetic: /vjuː ˈmɒdl/
+  speak: View Model
+  meaning: 持有界面状态、跨配置变更存活的架构组件。
+
+- word: Lifecycle
+  phonetic: /ˈlaɪfˌsaɪkl/
+  speak: Lifecycle
+  meaning: 组件生命周期；Scope / Observer 常挂在其上。
+
+- word: Intent
+  phonetic: /ɪnˈtent/
+  speak: Intent
+  meaning: Android 组件间通信的消息对象。
+
+- word: Binder
+  phonetic: /ˈbaɪndər/
+  speak: Binder
+  meaning: Android IPC 核心机制。
+
+- word: ANR
+  phonetic: /ˌeɪ en ˈɑːr/
+  speak: A N R
+  meaning: Application Not Responding，主线程长时间无响应。
+
+- word: SEI
+  phonetic: /ˌes iː ˈaɪ/
+  speak: S E I
+  meaning: 补充增强信息，常用于 RTC 同步课件/时间线。
+
+- word: RTC
+  phonetic: /ˌɑːr tiː ˈsiː/
+  speak: R T C
+  meaning: Real-Time Communication，实时音视频通信。
+
+- word: SDK
+  phonetic: /ˌes diː ˈkeɪ/
+  speak: S D K
+  meaning: 软件开发工具包；对外暴露稳定 API。
+
+- word: API
+  phonetic: /ˌeɪ piː ˈaɪ/
+  speak: A P I
+  meaning: 应用程序接口。
+
+- word: JVM
+  phonetic: /ˌdʒeɪ viː ˈem/
+  speak: J V M
+  meaning: Java 虚拟机。
+
+- word: ART
+  phonetic: /ɑːrt/
+  speak: art
+  meaning: Android Runtime，Android 的运行时。
+
+- word: GC
+  phonetic: /ˌdʒiː ˈsiː/
+  speak: G C
+  meaning: Garbage Collection，垃圾回收。
+
+- word: Interceptor
+  phonetic: /ˌɪntəˈseptər/
+  speak: Interceptor
+  meaning: 拦截器；OkHttp 用责任链处理请求/响应。
+
+- word: Certificate
+  phonetic: /sərˈtɪfɪkət/
+  speak: Certificate
+  meaning: 数字证书，把公钥与身份绑定，由 CA 签名。
+
+- word: Handshake
+  phonetic: /ˈhændʃeɪk/
+  speak: Handshake
+  meaning: 握手；TCP/TLS 建立连接时的协商过程。

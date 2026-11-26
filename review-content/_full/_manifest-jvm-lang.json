@@ -1,0 +1,240 @@
+{
+  "version": 1,
+  "depth": "full",
+  "count": 33,
+  "ids": [
+    "kp-thread-basics",
+    "kp-synchronized-lock",
+    "kp-volatile-hb",
+    "kp-cas-atomic",
+    "kp-thread-pool",
+    "kp-concurrent-collections",
+    "kp-wait-notify",
+    "kp-deadlock",
+    "kp-classloader",
+    "kp-jvm-memory",
+    "kp-gc-basics",
+    "kp-jmm",
+    "kp-kotlin-jvm",
+    "kp-oop-basics",
+    "kp-null-safety",
+    "kp-collections",
+    "kp-generics",
+    "kp-data-sealed",
+    "kp-equals-hashcode",
+    "kp-extensions-hof",
+    "kp-java-kotlin-interop",
+    "kp-annotations-exceptions",
+    "kp-val-var-lazy",
+    "kp-string-immutability",
+    "kp-coroutine-basics",
+    "kp-coroutine-dispatchers",
+    "kp-coroutine-builders",
+    "kp-coroutine-cancel",
+    "kp-coroutine-flow",
+    "kp-coroutine-channel-mutex",
+    "kp-agent-what",
+    "kp-agent-rules-skills",
+    "kp-agent-workflow"
+  ],
+  "items": [
+    {
+      "id": "kp-thread-basics",
+      "module": "concurrent",
+      "title": "线程模型与线程状态",
+      "file": "kp-thread-basics.md"
+    },
+    {
+      "id": "kp-synchronized-lock",
+      "module": "concurrent",
+      "title": "synchronized 与 ReentrantLock",
+      "file": "kp-synchronized-lock.md"
+    },
+    {
+      "id": "kp-volatile-hb",
+      "module": "concurrent",
+      "title": "volatile、可见性与 happens-before",
+      "file": "kp-volatile-hb.md"
+    },
+    {
+      "id": "kp-cas-atomic",
+      "module": "concurrent",
+      "title": "CAS、原子类与 ABA",
+      "file": "kp-cas-atomic.md"
+    },
+    {
+      "id": "kp-thread-pool",
+      "module": "concurrent",
+      "title": "线程池 ThreadPoolExecutor",
+      "file": "kp-thread-pool.md"
+    },
+    {
+      "id": "kp-concurrent-collections",
+      "module": "concurrent",
+      "title": "ConcurrentHashMap 与并发集合",
+      "file": "kp-concurrent-collections.md"
+    },
+    {
+      "id": "kp-wait-notify",
+      "module": "concurrent",
+      "title": "wait/notify/sleep/join/interrupt",
+      "file": "kp-wait-notify.md"
+    },
+    {
+      "id": "kp-deadlock",
+      "module": "concurrent",
+      "title": "死锁条件与排查",
+      "file": "kp-deadlock.md"
+    },
+    {
+      "id": "kp-classloader",
+      "module": "jvm",
+      "title": "类加载与双亲委派",
+      "file": "kp-classloader.md"
+    },
+    {
+      "id": "kp-jvm-memory",
+      "module": "jvm",
+      "title": "运行时数据区与对象头（面试版）",
+      "file": "kp-jvm-memory.md"
+    },
+    {
+      "id": "kp-gc-basics",
+      "module": "jvm",
+      "title": "GC 基础与分代（面试口述）",
+      "file": "kp-gc-basics.md"
+    },
+    {
+      "id": "kp-jmm",
+      "module": "jvm",
+      "title": "Java 内存模型 JMM",
+      "file": "kp-jmm.md"
+    },
+    {
+      "id": "kp-kotlin-jvm",
+      "module": "jvm",
+      "title": "Kotlin 在 JVM/Android 上的字节码差异",
+      "file": "kp-kotlin-jvm.md"
+    },
+    {
+      "id": "kp-oop-basics",
+      "module": "language",
+      "title": "面向对象、重载重写与关键字",
+      "file": "kp-oop-basics.md"
+    },
+    {
+      "id": "kp-null-safety",
+      "module": "language",
+      "title": "Kotlin 空安全与平台类型",
+      "file": "kp-null-safety.md"
+    },
+    {
+      "id": "kp-collections",
+      "module": "language",
+      "title": "Java/Kotlin 集合选型",
+      "file": "kp-collections.md"
+    },
+    {
+      "id": "kp-generics",
+      "module": "language",
+      "title": "泛型与类型擦除",
+      "file": "kp-generics.md"
+    },
+    {
+      "id": "kp-data-sealed",
+      "module": "language",
+      "title": "data class、sealed、object 与 enum",
+      "file": "kp-data-sealed.md"
+    },
+    {
+      "id": "kp-equals-hashcode",
+      "module": "language",
+      "title": "equals、hashCode 与 ==",
+      "file": "kp-equals-hashcode.md"
+    },
+    {
+      "id": "kp-extensions-hof",
+      "module": "language",
+      "title": "扩展函数与高阶函数",
+      "file": "kp-extensions-hof.md"
+    },
+    {
+      "id": "kp-java-kotlin-interop",
+      "module": "language",
+      "title": "Java 与 Kotlin 混编互操作",
+      "file": "kp-java-kotlin-interop.md"
+    },
+    {
+      "id": "kp-annotations-exceptions",
+      "module": "language",
+      "title": "注解与异常",
+      "file": "kp-annotations-exceptions.md"
+    },
+    {
+      "id": "kp-val-var-lazy",
+      "module": "language",
+      "title": "val、var、lateinit、lazy 与 inline",
+      "file": "kp-val-var-lazy.md"
+    },
+    {
+      "id": "kp-string-immutability",
+      "module": "language",
+      "title": "String 不可变与常量池（面试版）",
+      "file": "kp-string-immutability.md"
+    },
+    {
+      "id": "kp-coroutine-basics",
+      "module": "coroutine",
+      "title": "协程模型：线程、挂起与续体",
+      "file": "kp-coroutine-basics.md"
+    },
+    {
+      "id": "kp-coroutine-dispatchers",
+      "module": "coroutine",
+      "title": "Dispatcher 与线程池选择",
+      "file": "kp-coroutine-dispatchers.md"
+    },
+    {
+      "id": "kp-coroutine-builders",
+      "module": "coroutine",
+      "title": "launch、async、withContext 与 Scope",
+      "file": "kp-coroutine-builders.md"
+    },
+    {
+      "id": "kp-coroutine-cancel",
+      "module": "coroutine",
+      "title": "协程取消、异常与监督",
+      "file": "kp-coroutine-cancel.md"
+    },
+    {
+      "id": "kp-coroutine-flow",
+      "module": "coroutine",
+      "title": "Flow 冷热流、StateFlow 与 replay",
+      "file": "kp-coroutine-flow.md"
+    },
+    {
+      "id": "kp-coroutine-channel-mutex",
+      "module": "coroutine",
+      "title": "Channel、Mutex 与限流",
+      "file": "kp-coroutine-channel-mutex.md"
+    },
+    {
+      "id": "kp-agent-what",
+      "module": "agent",
+      "title": "Agent 是什么",
+      "file": "kp-agent-what.md"
+    },
+    {
+      "id": "kp-agent-rules-skills",
+      "module": "agent",
+      "title": "Rules、Skills、MCP 与 Plugin",
+      "file": "kp-agent-rules-skills.md"
+    },
+    {
+      "id": "kp-agent-workflow",
+      "module": "agent",
+      "title": "AI Coding 工作流与面试口述",
+      "file": "kp-agent-workflow.md"
+    }
+  ]
+}
