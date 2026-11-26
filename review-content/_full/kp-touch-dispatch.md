@@ -4,7 +4,7 @@ type: knowledge
 module: android
 title: 触摸事件分发与滑动冲突
 priority: P0
-version: 3
+version: 4
 order: 30
 requires: [kp-activity-lifecycle]
 ---
@@ -128,6 +128,8 @@ override fun onTouchEvent(ev: MotionEvent): Boolean {
 边界三：父已经拦截之后，子收到 CANCEL。子如果在 DOWN 时做了按下高亮，CANCEL 里不恢复，界面会停在按下态。列表自己的实现一般会处理 CANCEL；自己写的按钮态要记得收。
 
 边界四：`OnTouchListener` 为了「顺便打个日志」返回了 true。点击监听不再回调。日志监听必须返回 false。
+
+**错误对照：** 错法是父 `ViewPager2` 在 `ACTION_DOWN` 就 `return true` 抢序列，内层 `RecyclerView` 永远收不到后续 MOVE，表现为「列表完全不能滑」。对法是 DOWN 放行，MOVE 超过 `touchSlop` 且 `dx > dy` 再拦截，与子列表 `requestDisallowInterceptTouchEvent` 配合。
 
 ## 画面（text 结构图）
 

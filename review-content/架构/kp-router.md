@@ -4,7 +4,7 @@ type: knowledge
 module: architecture
 title: 路由原理
 priority: P0
-version: 3
+version: 4
 order: 30
 requires: [kp-componentization]
 ---
@@ -139,6 +139,8 @@ object LoginInterceptor : Interceptor {
 边界三：登录拦截里同步请求用户信息。网络慢时，点击后主线程卡住，甚至 ANR。拦截器只看本地会话。刷新 token 这种必须的网络要异步，超时后停在登录页，而不是一直不返回。
 
 边界四：混淆把目标 Activity 改名，表里仍是旧字符串。跳转 ClassNotFound。keep 规则要和表一起生成，而不是靠人记得去 proguard 文件里加。
+
+**错误对照：** 错法是在登录拦截器里同步 `blockingGet` 用户信息，点击路由主线程卡死。对法：拦截只看本地 session/token 是否有效，刷新身份放异步 Worker，超时回登录页而不是占住 `navigate`。
 
 ## 画面（text 结构图）
 

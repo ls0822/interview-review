@@ -4,7 +4,7 @@ type: knowledge
 module: language
 title: equals、hashCode 与 ==
 priority: P0
-version: 2
+version: 3
 order: 40
 requires: [kp-oop-basics, kp-string-immutability]
 ---
@@ -38,6 +38,8 @@ requires: [kp-oop-basics, kp-string-immutability]
 4. **Kotlin `==` 空安全。** `a == b` 在 a 可空时不会 NPE；`===` 才是引用比较。
 5. **String 与常量池迷惑。** 字面量 `==` 可能 true；`new String` 对 `new String` `==` false。业务禁止用引用相等。
 6. **装箱缓存（Integer -128..127）。** `==` 可能 true 是实现细节，不能当数值相等 API。比较数值用 `equals` 或 primitives。
+
+**数值与排序：** `float`/`double` 参与 equals 用 `Float.floatToIntBits` 等规则，NaN 与正负零是契约细节。集合用 equals/hash，排序用 `compareTo`，两套字段别只实现一半——`TreeSet` 只认 compareTo，与 `HashSet` 的 equals 不一致时会出现「树里能放、哈希里认为重复」的诡异行为。
 
 ## 使用与实践
 

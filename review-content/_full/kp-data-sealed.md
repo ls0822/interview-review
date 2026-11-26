@@ -4,7 +4,7 @@ type: knowledge
 module: language
 title: data class、sealed、object 与 enum
 priority: P0
-version: 2
+version: 3
 order: 60
 requires: [kp-oop-basics, kp-equals-hashcode]
 ---
@@ -40,6 +40,8 @@ requires: [kp-oop-basics, kp-equals-hashcode]
 4. **vs enum。** 枚举常量类加载各一份、字段形状同构；`Success(data)` 要无数 payload 实例，用 sealed。方向/日志级别用 enum。
 5. **object 初始化时机。** 第一次主动使用该类（任一 static 入口），JVM 保证一次。不是「进主函数就全初始化」。
 6. **sealed interface。** 多能力 + 穷尽；别把几十种子类塞一层成上帝类型。事件用 sealed interface，承载数据用 sealed class 常见。
+
+**失败模式：** 在 `object` 或 `enum` 常量上挂 `mutableListOf` 会让所有引用共享同一堆对象，旋转/多窗口表现为「改一处全变」。`data object Loading` 无载荷但给出稳定 `equals`/`toString`，适合空态分支。Java 调用方没有 Kotlin 穷尽 `when`，SDK 对外状态机要么用 enum 固定分支，要么文档列全子类型并避免静默 `else` 吃掉新错误码。
 
 ## 使用与实践
 

@@ -4,8 +4,8 @@ type: knowledge
 module: framework
 title: 图片加载框架
 priority: P0
-version: 3
-order: 20
+version: 4
+order: 30
 requires: [kp-framework-stack]
 ---
 

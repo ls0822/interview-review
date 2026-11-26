@@ -4,7 +4,7 @@ type: knowledge
 module: compose
 title: Compose 副作用 API
 priority: P0
-version: 3
+version: 4
 order: 30
 requires: [kp-compose-recomposition, kp-coroutine-builders]
 ---
@@ -131,6 +131,8 @@ fun ClassRoom(viewModel: ClassViewModel, web: WebView) {
 边界四：`LaunchedEffect(state)` 把整个状态对象当 key。任何一个字段变化都重启协程，里面的订阅被反复取消。key 只用真正决定这段协程的值，例如房间号或页码。
 
 边界五：离开页面后上传必须完成，却启动在 `rememberCoroutineScope()` 里。离开组合，上传被取消。这种任务放上传队列，不跟界面组合绑定。
+
+**错误对照：** 错法是把 `web.evaluateJavascript("flip(${state.page})")` 写在 Composable 函数体里——每次重组翻一次页，课件闪屏。对法：`LaunchedEffect(state.page) { ... }`，key 只绑真正要监听的页码。
 
 ## 画面（text 结构图）
 

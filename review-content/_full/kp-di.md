@@ -4,7 +4,7 @@ type: knowledge
 module: framework
 title: 依赖注入 Hilt / Koin
 priority: P0
-version: 3
+version: 4
 order: 20
 requires: [kp-componentization]
 ---
@@ -142,6 +142,8 @@ val appModule = module {
 边界三：SDK 的 `init` 要求宿主先 `startKoin` 并安装 SDK 的 module。另一个已经用 Hilt 的宿主无法接受第二套全局容器。SDK 自己 new，宿主只传配置。
 
 边界四：每个页面自己 `OkHttpClient()`，虽然用了注入框架，模块里却写成 `@Provides fun client() = OkHttpClient()` 没有 Singleton。每个注入点一个新池，连接无法复用。作用域要和「这个对象该有几份」一致。
+
+**错误对照：** 错法是在 `@Singleton` 仓库里构造注入 `Activity`，旋转后仓库仍握着已销毁 Activity。对法：Singleton 只接 `Application`、接口或无界面依赖；界面短生命周期对象进 `@ActivityScoped` / ViewModel 图。
 
 ## 画面（text 结构图）
 

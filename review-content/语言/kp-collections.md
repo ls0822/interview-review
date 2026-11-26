@@ -4,7 +4,7 @@ type: knowledge
 module: language
 title: Java/Kotlin 集合选型
 priority: P0
-version: 2
+version: 3
 order: 70
 requires: [kp-equals-hashcode]
 ---
@@ -42,6 +42,8 @@ requires: [kp-equals-hashcode]
 4. **Kotlin 只读边界。** `List` 无 `add`，底层仍可变；Java 强转 `java.util.List` 可改。出站 `toList()` 或文档写清所有权。
 5. **有序 ≠ 排序。** `LinkedHashMap` 保插入/访问序；`TreeMap` 按键序；`HashMap` 遍历无序——UI 勿依赖 HashMap 顺序。
 6. **Sequence 惰性。** 大链、大源、少中间列表时用；小数据几次 `map` 用 `List` 更可读。
+
+**并发与对比：** `Collections.synchronizedMap` 只锁整张表，迭代仍须外部同步；高写并发应 `ConcurrentHashMap`，读多写少广播列表才考虑 `CopyOnWriteArrayList`（写时全表复制）。`CHM.compute` 是单键原子读改写，不是两键事务。与数组：`IntArray` 等无装箱；UI 列表几乎总是 `ArrayList`，别用 `LinkedList` 当下标访问容器。给 `HashMap` 套 `synchronized` 不能替代 CHM 的细粒度语义，还会把整表锁成热点。
 
 ## 使用与实践
 

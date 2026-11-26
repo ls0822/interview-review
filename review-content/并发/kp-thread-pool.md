@@ -4,7 +4,7 @@ type: knowledge
 module: concurrent
 title: 线程池 ThreadPoolExecutor
 priority: P0
-version: 2
+version: 3
 requires: [kp-thread-basics]
 order: 50
 ---
@@ -44,6 +44,8 @@ order: 50
 **专家加分：定时任务。** `scheduleAtFixedRate` 上次没完不会重叠在同调度线程；任务内再丢无界池仍可能并发。未捕获异常 → 后续周期停。
 
 **失败模式：** `CallerRunsPolicy` 在 UI 线程 `execute` → 拒绝路径主线程跑重活，ANR。`Discard*` 静默丢任务，线上以为在上传。`shutdownNow` 对不查中断的死循环无效。
+
+**与协程对比：** `Dispatchers.Default`/`IO` 背后仍是池化线程，但协程任务可挂起协作；池满时裸 `execute` 立刻走拒绝策略，挂起式生产者可以结构化反压。面试要点：懂池是为了把**线程上限、队列深度、拒绝语义**三件事说清楚，而不是背工厂方法名。`ScheduledThreadPoolExecutor` 单调度线程串行周期任务，任务里再 `execute` 到无界池会把「定时」和「并发」叠在一起，栈里最难追。
 
 ## 使用与实践
 

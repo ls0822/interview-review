@@ -4,7 +4,7 @@ type: knowledge
 module: network
 title: UDP 协议
 priority: P0
-version: 3
+version: 4
 order: 15
 requires: [kp-tcp]
 ---
@@ -108,6 +108,8 @@ fun sendVideo(socket: DatagramSocket, packets: List<ByteArray>, addr: SocketAddr
 边界三：一个数据报被 IP 层拆成多片，最后一片丢了。应用收不到这一整个数据报，也没有「半条消息」可以解析。所以实时包要控制在一个 MTU 内。TCP 则是字节流，没有这个「整包消失」的形态，但会重传。
 
 边界四：把 IM 消息直接放进 UDP 且不做序号和重传。弱网丢一条，会话就缺消息，对面还不知道。IM 要么用 TCP 长连接，要么做完整的可靠层，不能只因为「UDP 快」就拿来发消息。
+
+**错误对照：** 错法认为 `DatagramSocket.send` 返回 true 就等于对端已处理——NAT 断映射、对端未监听都会静默丢包。对法：信令走 TCP/可靠层；实时媒体用 UDP 也要序号 + 过期丢弃 + 应用层 Ack/心跳。
 
 ## 画面（text 结构图）
 

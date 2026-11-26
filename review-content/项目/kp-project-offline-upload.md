@@ -4,7 +4,7 @@ type: knowledge
 module: project
 title: 离线包与上传 SDK
 priority: P0
-version: 3
+version: 4
 order: 30
 requires: [kp-framework-stack, kp-project-im]
 ---
@@ -154,6 +154,8 @@ class UploadQueue(private val slots: Int, private val maxWaiting: Int) {
 边界四：队列无界，业务在循环里入队大文件。内存涨，最后低内存杀进程，所有偏移如果没落盘就从头再来。队列有界，偏移落盘，失败有回调。
 
 边界五：Push 预处理和打开页面各启动一次全量下载，互相覆盖临时文件。同一个包 id 只能有一个进行中的任务，后来的请求附着到已有任务上。
+
+**错误对照：** 错法摘要校验失败仍 `replaceAtomically`，H5 白屏且差分基线损坏。对法：失败只删临时文件，保留旧版本；上传队列有界，已确认 `offset` 落盘再继续。
 
 ## 画面（text 结构图）
 

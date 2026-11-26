@@ -4,8 +4,8 @@ type: knowledge
 module: architecture
 title: 组件化与依赖治理
 priority: P0
-version: 3
-order: 10
+version: 4
+order: 15
 requires: []
 ---
 

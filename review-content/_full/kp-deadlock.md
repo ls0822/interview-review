@@ -4,7 +4,7 @@ type: knowledge
 module: concurrent
 title: 死锁条件与排查
 priority: P0
-version: 2
+version: 3
 requires: [kp-synchronized-lock, kp-wait-notify]
 order: 70
 ---
@@ -39,6 +39,8 @@ order: 70
 **专家加分：非 Java 锁环。** 主线程 Binder 同步等对方，对方回调占主线程资源；DB 行锁；Mutex 栈在 kotlinx 挂起点，结合线程名与持有锁日志。
 
 **失败模式：** 持锁调外部回调/监听器再抢锁。线上只能靠 traces：`BLOCKED` on monitor、`WAITING` on `ReentrantLock`；记录锁身份与线程名，匿名 pool 线程无法定位模块。
+
+**排查与易混：** `jstack` 打出 `Found one Java-level deadlock` 才是经典监视器四条件环；主线程 Binder 同步 + 子线程回调要主线程资源时往往**没有这句**却仍是循环等待，不要被「只有两把 Java 锁才算死锁」误导。与饥饿对比：饥饿线程还在前进只是慢；活锁大家在退让重试无进展；死锁是环上谁都拿不到下一资源。`LockSupport.park` 未配对 unpark 会永远 WAITING，形态像死锁但根因是丢失唤醒，加锁顺序治不了。
 
 ## 使用与实践
 

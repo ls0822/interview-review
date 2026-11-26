@@ -4,7 +4,7 @@ type: knowledge
 module: language
 title: 扩展函数与高阶函数
 priority: P0
-version: 2
+version: 3
 order: 90
 requires: [kp-oop-basics, kp-generics]
 ---
@@ -41,6 +41,8 @@ requires: [kp-oop-basics, kp-generics]
 4. **inline 贴入。** 小循环式标准库 `map`/`filter` 展开到调用点。过大公开 inline 膨胀 DEX、混淆栈难读。
 5. **非局部 return。** 仅 inline Lambda 可 `return` 外层函数。`crossinline` 禁止，因 Lambda 可能延后执行。`noinline` 某参数仍要对象化。
 6. **reified 绑定 inline。** 类型参数只存活到编译；内联后调用点 `T::class.java` 是具体类。不能用于接口虚方法、非 inline 高阶。
+
+**inline 边界：** `public inline` 会膨胀每个调用点 DEX，断点栈变碎；reified 工具宜小而专。非 `private` 的 inline 不能访问调用方包外的 `private` 成员。与 SAM：`fun interface` 给 Java 一个方法；Kotlin 函数类型在 Java 是 `Function1`，SDK 公开回调优先 SAM 或 `@JvmStatic` 成员。扩展不能替代多态：插件化要多态就写接口成员，别指望在子类实例上通过父类型引用调到子类扩展。
 
 ## 使用与实践
 

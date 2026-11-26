@@ -27,7 +27,16 @@ function escapeHtml(s) {
 
 export function renderMarkdown(md, glossaryMap) {
   const html = marked.parse(md || '')
-  return linkifyEnglish(html, glossaryMap)
+  return linkifyEnglish(linkifyKnowledgeIds(html), glossaryMap)
+}
+
+/** 正文里的 `kp-xxx` / `lc-xxx` 变成可跳转链接 */
+function linkifyKnowledgeIds(html) {
+  return String(html || '').replace(
+    /<code>(kp-[a-z0-9-]+|lc-\d+[a-z0-9-]*)<\/code>/gi,
+    (_m, id) =>
+      `<button type="button" class="kp-link" data-nav="${id.startsWith('lc-') ? 'algo' : 'kp'}/${id}">${id}</button>`,
+  )
 }
 
 /** 按 ## 切成卡片，便于阅读；「画面」显示为「结构示意」 */

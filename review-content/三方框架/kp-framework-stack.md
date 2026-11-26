@@ -4,7 +4,7 @@ type: knowledge
 module: framework
 title: 客户端主流三方分层（网络/图片/DI/路由等）
 priority: P0
-version: 3
+version: 4
 order: 10
 requires: [kp-arch-patterns, kp-di]
 ---
@@ -135,6 +135,8 @@ class PageViewModel @Inject constructor(
 边界三：为了「统一网络」让 IM 长连接也走 OkHttp 的一次 GET 长轮询，又和连接池互相超时。短请求和长连接分开实现、分开打点，只在业务层统一成「收到一条消息」的接口。
 
 边界四：宿主 App 用 Hilt，SDK 又要求 `startKoin`。两套组合根抢同一个对象。SDK 手动 init，App 在自己的模块里调用它。
+
+**错误对照：** 错法是 Composable 里直接 `Retrofit.create().fetch()`，重组重复打接口且测试无法换假仓库。对法：请求只进 `Repository`，ViewModel 触发；UI 只收 `StateFlow`。
 
 ## 画面（text 结构图）
 

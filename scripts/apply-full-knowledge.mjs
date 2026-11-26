@@ -57,6 +57,23 @@ const MODULES = [
   ['algo', '算法', 90],
 ]
 
+/** 具名问答（非 hash 八位）：清空模块目录前备份，结束后写回，避免被冲掉 */
+function isCuratedQaFile(name) {
+  return /^q-(?![\da-f]{8}\.md$)[a-z][\w-]*\.md$/i.test(name)
+}
+const curatedQa = []
+for (const name of fs.readdirSync(outRoot)) {
+  const dir = path.join(outRoot, name)
+  if (!fs.statSync(dir).isDirectory() || name === '_full') continue
+  for (const f of fs.readdirSync(dir)) {
+    if (!isCuratedQaFile(f)) continue
+    curatedQa.push({
+      rel: `${name}/${f}`,
+      text: fs.readFileSync(path.join(dir, f), 'utf8'),
+    })
+  }
+}
+
 // 清空模块目录，保留 _full / glossary / modules
 for (const name of fs.readdirSync(outRoot)) {
   const p = path.join(outRoot, name)
@@ -306,5 +323,9 @@ tags: ["算法"]
   }
 }
 
-console.log(`applied full knowledge: kp=${kpCount} qa≈${qaCount}`)
+for (const item of curatedQa) {
+  write(item.rel, item.text.endsWith('\n') ? item.text : item.text + '\n')
+}
+
+console.log(`applied full knowledge: kp=${kpCount} qa≈${qaCount} curatedQa=${curatedQa.length}`)
 console.log('run: npm run content')

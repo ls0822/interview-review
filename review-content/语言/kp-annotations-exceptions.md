@@ -4,7 +4,7 @@ type: knowledge
 module: language
 title: 注解与异常
 priority: P0
-version: 2
+version: 3
 order: 100
 requires: [kp-oop-basics]
 ---
@@ -42,6 +42,8 @@ Kotlin 对 Java 要 `@Throws` 才出现在异常表。协程里 `CancellationExc
 4. **catch 粒度。** `catch (Exception)` 吃掉 `CancellationException` → 协程取消变挂起泄漏。`Error` 一般不救。空 catch 把失败变成功。
 5. **try-with-resources / use。** 关闭异常与业务异常 suppressed 叠加；日志要看 suppressed。
 6. **可预期 vs 编程错误。** 无网/无权限/坏参数 → `Result` 或错误码；不变量破坏 → `IllegalStateException`。toB SDK 不宜长受检链。
+
+**Android 边界：** KSP `SOURCE` 注解进不了 APK，路由靠生成表类；`RUNTIME` 反射路由要被 R8 keep 注解与被扫描类。与序列化注解对比：`@SerializedName` 改 JSON 字段名，不自动生成跳转逻辑——面试要把「谁消费注解」说清楚。`Throws` 只影响 Java 静态检查，不改变 Kotlin 运行时抛不抛。
 
 ## 使用与实践
 

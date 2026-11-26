@@ -4,7 +4,7 @@ type: knowledge
 module: network
 title: OkHttp 拦截器与连接池
 priority: P0
-version: 3
+version: 4
 order: 40
 requires: [kp-tcp, kp-https-cert]
 ---
@@ -120,6 +120,8 @@ val retrofit = Retrofit.Builder()
 边界三：POST 创建订单，读超时后库或业务又自动重试。服务器已经创建成功，客户端再创建一次。创建类接口用幂等键，并禁止无条件重试；超时后先查询订单是否存在。
 
 边界四：call 超时 20 秒，连接超时 30 秒。整次调用会先被 call 超时打断，连接超时永远不起作用。四个时间要放在一起看，call 应覆盖你允许的总等待。
+
+**错误对照：** 错法是每个 Fragment 各自 `OkHttpClient.Builder().build()`，弱网 TLS 握手占满接口耗时。对法：进程内单例 `OkHttpClient`，应用拦截器管 token，网络拦截器看真实 URL。
 
 ## 画面（text 结构图）
 

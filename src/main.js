@@ -28,6 +28,7 @@ import {
   rawUrl,
 } from './syncConfig.js'
 import { testGithubAuth, markSyncProcessed } from './githubInbox.js'
+import { THEMES, initTheme, applyTheme, loadThemeId } from './theme.js'
 
 const app = document.getElementById('app')
 const wordPop = document.getElementById('word-pop')
@@ -36,6 +37,7 @@ let pack = null
 let progress = loadProgress()
 let glossaryMap = new Map()
 let route = { name: 'home', args: [] }
+initTheme()
 
 let quizQueue = []
 let quizIndex = 0
@@ -157,6 +159,7 @@ function renderHome() {
         <button type="button" data-nav="feedback">${openNoteCount() ? `学习反馈 (${openNoteCount()})` : '学习反馈'}</button>
         <button type="button" data-action="sync-agent-inbox">同步给 Agent</button>
         <button type="button" data-nav="sync-settings">同步设置</button>
+        <button type="button" data-nav="appearance">外观</button>
       </div>
       <p class="muted">「明白 / 不懂」给 Agent 改内容。点「同步给 Agent」写入本地并（已配 Token 时）上传 GitHub <code>agent-inbox/</code>。</p>
       <p id="sync-status" class="muted">${escapeText(formatLastSync())}</p>
@@ -180,11 +183,30 @@ function renderHome() {
   )
 }
 
+function sortByOrder(items) {
+  return [...items].sort((a, b) => {
+    const ao = a.order == null || Number.isNaN(Number(a.order)) ? 1e9 : Number(a.order)
+    const bo = b.order == null || Number.isNaN(Number(b.order)) ? 1e9 : Number(b.order)
+    if (ao !== bo) return ao - bo
+    return String(a.title || a.id || '').localeCompare(String(b.title || b.id || ''), 'zh')
+  })
+}
+
+function requiresHint(item) {
+  const reqs = Array.isArray(item.requires) ? item.requires.filter(Boolean) : []
+  if (!reqs.length) return ''
+  const titles = reqs.map((id) => {
+    const hit = pack.knowledge.find((k) => k.id === id) || pack.algo.find((a) => a.id === id)
+    return hit?.title || id
+  })
+  return `<div class="muted kp-requires">先修：${escapeText(titles.join(' · '))}</div>`
+}
+
 function renderModule(moduleId) {
   const name = moduleName(moduleId)
-  const kps = pack.knowledge.filter((x) => x.module === moduleId)
+  const kps = sortByOrder(pack.knowledge.filter((x) => x.module === moduleId))
   const qas = pack.qa.filter((x) => x.module === moduleId)
-  const algos = pack.algo.filter((x) => x.module === moduleId)
+  const algos = sortByOrder(pack.algo.filter((x) => x.module === moduleId))
   app.innerHTML = shell(
     name,
     `
@@ -194,10 +216,11 @@ function renderModule(moduleId) {
     </div>
     ${
       kps.length
-        ? `<div class="card"><h2>知识点（${kps.length}）</h2>${kps
+        ? `<div class="card"><h2>知识点（按复习顺序 · ${kps.length}）</h2>${kps
             .map(
               (k) => `<button type="button" class="list-item" data-nav="kp/${k.id}">
-            <div class="row space"><span>${k.title}</span><span>${priorityTag(k.priority)} ${statusLabel(k, 'knowledge')}</span></div>
+            <div class="row space"><span>${escapeText(k.title)}</span><span>${priorityTag(k.priority)} ${statusLabel(k, 'knowledge')}</span></div>
+            ${requiresHint(k)}
           </button>`,
             )
             .join('')}</div>`
@@ -537,6 +560,34 @@ async function pushInbox(btn, options = {}) {
     if (status) status.textContent = `同步失败: ${err?.message || err}`
     if (btn && label) btn.textContent = label
   }
+}
+
+function themeSwatches() {
+  const active = loadThemeId()
+  return `<div class="theme-grid">${THEMES.map((t) => {
+    const v = t.vars
+    return `<button type="button" class="theme-swatch ${t.id === active ? 'on' : ''}" data-action="set-theme" data-theme="${t.id}">
+      <strong>${escapeText(t.name)}</strong>
+      <span class="swatch-bar" aria-hidden="true">
+        <i style="background:${v['--bg']}"></i>
+        <i style="background:${v['--panel']}"></i>
+        <i style="background:${v['--accent']}"></i>
+        <i style="background:${v['--text']}"></i>
+      </span>
+    </button>`
+  }).join('')}</div>`
+}
+
+function renderAppearance() {
+  app.innerHTML = shell(
+    '外观',
+    `
+    <div class="card stack">
+      <p class="muted">颜色只存在本机浏览器，不影响题库内容。横屏时内容区会自动加宽。</p>
+      <h2>主题色</h2>
+      ${themeSwatches()}
+    </div>`,
+  )
 }
 
 function renderSyncSettings() {
@@ -884,6 +935,7 @@ function render() {
     else if (route.name === 'algo') renderAlgo(route.args[0])
     else if (route.name === 'feedback') renderFeedback()
     else if (route.name === 'sync-settings') renderSyncSettings()
+    else if (route.name === 'appearance') renderAppearance()
     else renderHome()
   } catch (err) {
     console.error(err)
@@ -933,6 +985,11 @@ function bindGlobalClicks() {
         quizIndex += 1
         showAnswer = false
         renderQuiz()
+        return
+      }
+      if (action === 'set-theme') {
+        applyTheme(actionEl.dataset.theme || 'night-blue')
+        render()
         return
       }
       if (action === 'read-kp') {

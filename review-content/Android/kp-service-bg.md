@@ -4,7 +4,7 @@ type: knowledge
 module: android
 title: Service 与后台限制
 priority: P0
-version: 3
+version: 4
 order: 40
 requires: [kp-activity-lifecycle]
 ---
@@ -109,6 +109,8 @@ class PlaybackService : Service() {
 边界三：同时 start 和 bind，界面 `onDestroy` 里只 unbind，没 stop。服务继续跑，通知还在，用户已经离开。结束条件要写全：工作完成 `stopSelf`，绑定计数归零再销毁。
 
 边界四：Binder 方法里直接读数据库。宿主在主线程调用，ANR 栈在宿主主线程的 Binder 调用上，不在服务进程的业务函数里。耗时接口做成异步回调，并在文档里写明线程。
+
+**错误对照：** 错法是在 `Activity` 里 `startService` 做几十秒同步上传，页面一划走就以为任务停了——`START_STICKY` 可能复活，也可能在后台启动限制下根本没跑起来。对法：长上传进 `WorkManager` 或自有队列 + 前台类型匹配的长任务通知；页面只发命令、看状态，不绑生命周期。
 
 ## 画面（text 结构图）
 

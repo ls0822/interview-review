@@ -4,7 +4,7 @@ type: knowledge
 module: concurrent
 title: CAS、原子类与 ABA
 priority: P0
-version: 2
+version: 3
 requires: [kp-volatile-hb]
 order: 35
 ---
@@ -37,6 +37,8 @@ CAS 是「若内存仍等于期望值则写入新值」的一条原子指令；�
 **专家加分：与 hb。** `compareAndSet` 成功隐含 volatile 读写可见性。但「CAS 改 A 再 CAS 改 B」两步之间别人可见只改了一半。
 
 **失败模式：** CAS 循环里做网络/副作用 → 重试重复下单。长临界区用 CAS 自旋 → CPU 打满。`weakCompareAndSet` 可能虚假失败，需重试；别与 plain 语义混为 volatile。
+
+**与锁的取舍：** 单变量、低冲突计数 CAS 往往比 `synchronized` 轻；多字段不变式或链表拓扑除非整棵用 `AtomicReference` 一次换成不可变快照，否则仍要锁或单写线程。CAS 失败是自旋占 CPU，锁失败是阻塞让出核——热点争用且线程数接近/超过核数时，盲目 CAS 会把整机打满；`LongAdder`、分段或短锁才是常见退法。与 `volatile` 写对比：`volatile` 保证可见单次写，不保证「读-改-写」原子；计数递增必须用原子类或锁。
 
 ## 使用与实践
 

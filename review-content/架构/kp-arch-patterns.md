@@ -4,7 +4,7 @@ type: knowledge
 module: architecture
 title: MVC / MVP / MVVM / MVI
 priority: P0
-version: 3
+version: 4
 order: 10
 requires: [kp-coroutine-flow]
 ---
@@ -149,6 +149,8 @@ LaunchedEffect(Unit) {
 边界三：简单设置页硬套 MVI，每个开关一个 Intent，文件比页面还长。这种页用 MVVM 的 `setEnabled()` 更清楚。状态开始互相影响时再收成一份 State。
 
 边界四：MVP 的 Presenter 在请求回来时没有看 detach。Activity 已经销毁，`view.showPage` 更新到旧窗口。回调第一行就要能丢掉这次结果。
+
+**错误对照：** 错法把 Toast 文案写进 `State`，配置变更或重新订阅又弹一次。对法：一次性 UI 走 `Effect`/`Channel`（replay=0），`State` 只放可重放界面字段。
 
 ## 画面（text 结构图）
 

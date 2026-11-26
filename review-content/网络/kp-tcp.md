@@ -4,7 +4,7 @@ type: knowledge
 module: network
 title: TCP 协议
 priority: P0
-version: 3
+version: 4
 order: 10
 ---
 
@@ -113,6 +113,8 @@ class FrameReader(private val input: InputStream) {
 边界三：对端进程崩溃，本端还停在 `read`。没有读超时的话，线程会一直堵着，心跳也不会发出去。所以读要带超时，超时再结合「多久没收到心跳响应」决定是继续等还是关掉重连。
 
 边界四：短连接高并发，客户端主动关闭，端口停在 TIME_WAIT，新连接临时发不出去。IM 不该每条消息一次握手，应复用长连接。
+
+**错误对照：** 错法把 TCP 当「一条 read 一条消息」，半包当完整帧上抛、粘包丢后半段。对法：长度头 + 接收缓冲，凑满 `4 + len` 再解析，剩余字节留在 `buf`。
 
 ## 画面（text 结构图）
 

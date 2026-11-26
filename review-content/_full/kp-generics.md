@@ -4,7 +4,7 @@ type: knowledge
 module: language
 title: 泛型与类型擦除
 priority: P0
-version: 2
+version: 3
 order: 80
 requires: [kp-collections, kp-oop-basics]
 ---
@@ -35,6 +35,8 @@ PECS：Producer Extends，Consumer Super。Kotlin 声明处 `interface Source<ou
 4. **通配符方向。** `List<out Number>` 读为 `Number`，不能 `add(Int)`（实际可能是 `List<Double>`）。`List<in Int>` 可 `add(Int)`，`get` 只能当 `Any?`。
 5. **reified 不是保留泛型。** inline 把调用点展开，`T::class` 在调用点替换具体类。普通函数、接口抽象方法不能 reified。
 6. **声明处 vs 使用处。** Java 通配符在使用处；Kotlin 倾向声明处 `out`/`in`。对 Java 暴露的 `out` API 会变成丑陋通配符签名。
+
+**星投影与混调：** `List<*>` 读出是 `Any?`，不能当 `List<Any>` 往里 `add`；这是「未知元素类型」不是「任意对象列表」。调 Java raw 返回平台类型，Kotlin 边界立刻改成具体泛型或单点 `@Suppress("UNCHECKED_CAST")`，别把污染传进仓库层。数组协变 `String[]` 赋给 `Object[]` 后插入非 String 运行炸；泛型列表不变正是为避免这类堆污染，面试要能对照讲清。
 
 ## 使用与实践
 
