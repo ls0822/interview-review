@@ -4,14 +4,22 @@ type: knowledge
 module: architecture
 title: SDK 对外 API 与架构边界
 priority: P0
-version: 3
+version: 4
 order: 40
 requires: [kp-componentization, kp-di]
 ---
 
 ## 一句话
 
-SDK 没有自己的 Application 生命周期，初始化可能很晚，也不能假设宿主用 Hilt。对外 API 要稳定、Java 能调、线程和空值写清楚；耗时的做成异步和错误码。内部再模块化，外部只看见一条窄接口。
+先抓住对比：**你在写 App 时，自己拥有 `Application` 和整条启动链；写 SDK 时，你是住进别人进程里的房客。**
+
+所以开场只记三句：
+
+1. **时机不归你。** 宿主可能隐私同意后才 `init`，也可能子线程、也可能调两次。别把「我一定在 Application 里先跑完」写进假设。
+2. **对外只留窄门。** 宿主看见的是 `init` / 进房 / 发送 / 回调和错误码；Socket、心跳、某家 RTC 都藏在门后。
+3. **契约要写死。** 哪条线程回调、空不空、耗时是否异步——Java 宿主没有 Kotlin 空安全替你兜，写不清就会变成对方线上的崩溃。
+
+Hilt、协程、具体网络栈都是门后的实现选择，**不要出现在对外签名上**。细节见下面「组成」和「原理」。
 
 ## 组成与结构
 

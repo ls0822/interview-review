@@ -7,10 +7,10 @@ const WORD_RE = /\b([A-Za-z][A-Za-z0-9_+]*(?:\.[A-Za-z][A-Za-z0-9_+]*)*)\b/g
 /** 章节标题 → 界面展示名（内容里仍可写「画面」） */
 export const SECTION_LABELS = {
   一句话: { label: '一句话', hint: '先抓住本质' },
-  组成与结构: { label: '组成与结构', hint: '有哪些零件' },
-  原理: { label: '原理', hint: '为什么这样跑' },
-  使用与实践: { label: '使用与实践', hint: '项目里怎么用' },
-  例子: { label: '例子', hint: '最小可跑通' },
+  组成与结构: { label: '组成与结构', hint: '有哪些零件、彼此什么关系' },
+  原理: { label: '原理', hint: '每个点：人话 → 代码 → 关联 → 别混' },
+  使用与实践: { label: '使用与实践', hint: '项目里怎么用，代码跟在旁边' },
+  例子: { label: '例子', hint: '串场景 / 错对对照' },
   画面: { label: '结构示意', hint: '脑内建模用的示意图，不是插图库' },
   结构示意: { label: '结构示意', hint: '脑内建模用的示意图' },
   常见坑与追问: { label: '常见坑与追问', hint: '面试容易卡的地方' },
@@ -37,6 +37,33 @@ function linkifyKnowledgeIds(html) {
     (_m, id) =>
       `<button type="button" class="kp-link" data-nav="${id.startsWith('lc-') ? 'algo' : 'kp'}/${id}">${id}</button>`,
   )
+}
+
+/** 段内按 ### 拆成知识单元卡片，避免一整块挤在一起 */
+function renderSectionBody(body, glossaryMap) {
+  const text = String(body || '').trim()
+  if (!text) return ''
+  if (!/^###\s+/m.test(text)) {
+    return `<div class="markdown">${renderMarkdown(text, glossaryMap)}</div>`
+  }
+  const chunks = text.split(/\n(?=###\s+)/)
+  const parts = []
+  for (const chunk of chunks) {
+    const m = chunk.match(/^###\s+(.+?)\s*\n([\s\S]*)$/) || chunk.match(/^###\s+(.+?)\s*$/)
+    if (!m) {
+      const lead = chunk.trim()
+      if (lead) parts.push(`<div class="markdown kp-lead">${renderMarkdown(lead, glossaryMap)}</div>`)
+      continue
+    }
+    const title = m[1].trim()
+    const unitBody = (m[2] || '').trim()
+    parts.push(`
+      <article class="kp-unit">
+        <h3 class="kp-unit-title">${escapeHtml(title)}</h3>
+        <div class="markdown">${renderMarkdown(unitBody, glossaryMap)}</div>
+      </article>`)
+  }
+  return parts.join('')
 }
 
 /** 按 ## 切成卡片，便于阅读；「画面」显示为「结构示意」 */
@@ -76,7 +103,7 @@ export function renderKnowledgeSections(md, glossaryMap, sectionMastery = {}) {
             <button type="button" class="ghost ${unclearOn}" data-action="feedback-section" data-section="${sectionKey}">这节不懂</button>
           </div>
         </header>
-        <div class="markdown">${renderMarkdown(body, glossaryMap)}</div>
+        <div class="kp-section-body">${renderSectionBody(body, glossaryMap)}</div>
       </section>`)
   }
   return blocks.join('')

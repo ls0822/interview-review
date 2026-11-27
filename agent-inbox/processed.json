@@ -1,10 +1,15 @@
 {
-  "updatedAt": "2026-11-26T09:25:00.000Z",
+  "updatedAt": "2026-11-27T02:05:00.000Z",
   "processed": [
     {
       "syncId": "sync-verify-local-001",
       "processedAt": "2026-11-26T09:25:00.000Z",
       "note": "kp-coroutine-basics 原理#5 补充 yield vs ensureActive 对照；version 4"
+    },
+    {
+      "syncId": "sync-mwxetcr1-wd9t",
+      "processedAt": "2026-11-27T02:05:00.000Z",
+      "note": "kp-sdk-api「一句话」降坡：房客隐喻 + 时机/窄门/契约三句；version 3→4"
     }
   ]
 }

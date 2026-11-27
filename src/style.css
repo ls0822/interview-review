@@ -194,6 +194,23 @@ button.kp-link:hover { background: color-mix(in srgb, var(--accent) 28%, transpa
   border-radius: var(--radius);
   padding: 0.9rem 1rem 1rem;
 }
+.kp-section-body { display: grid; gap: 0.65rem; }
+.kp-lead { opacity: 0.95; }
+.kp-unit {
+  background: color-mix(in srgb, var(--ink) 55%, var(--panel));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+.kp-unit-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.98rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.kp-unit .markdown > p:first-child { margin-top: 0.15rem; }
+.kp-unit .markdown strong { color: color-mix(in srgb, var(--accent) 70%, var(--text)); }
 .kp-section-head {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 0.75rem; margin-bottom: 0.45rem;
